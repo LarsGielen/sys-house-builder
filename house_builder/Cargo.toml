@@ -1,8 +1,8 @@
 [package]
-name = "bevy_app"
+name = "house_builder"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 bevy = "0.19.1"
-half_edge = { path = "../half_edge" }
+wall_graph = { path = "../wall_graph" }
