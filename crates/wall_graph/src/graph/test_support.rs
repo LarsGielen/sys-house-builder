@@ -1,14 +1,77 @@
 use glam::Vec2;
 
-use super::WallGraph;
-use crate::ids::{HalfEdgeId, WallNodeId};
+use super::{HalfEdgeId, Wall, WallGraph, WallNodeId};
+
+/// Adds a wall that is expected not to meet any other wall, so it comes back whole.
+pub(super) fn add_single_wall(graph: &mut WallGraph, from: WallNodeId, to: WallNodeId) -> Wall {
+	let walls = graph.add_wall(from, to).unwrap();
+	assert_eq!(walls.len(), 1, "wall was unexpectedly split: {walls:?}");
+	walls[0]
+}
+
+/// Every wall as its pair of nodes, normalised like `sorted_pairs`, so graphs can be compared regardless of wall direction.
+pub(super) fn wall_node_pairs(graph: &WallGraph) -> Vec<(WallNodeId, WallNodeId)> {
+	let walls: Vec<_> = graph
+		.walls()
+		.map(|wall| (wall.origin, wall.destination))
+		.collect();
+	sorted_pairs(&walls)
+}
+
+/// Node pairs with the smaller ID first, in sorted order.
+pub(super) fn sorted_pairs(pairs: &[(WallNodeId, WallNodeId)]) -> Vec<(WallNodeId, WallNodeId)> {
+	let mut sorted: Vec<_> = pairs.iter().map(|&(a, b)| (a.min(b), a.max(b))).collect();
+	sorted.sort();
+	sorted
+}
+
+/// The wall joining two nodes, in whichever direction it was added.
+pub(super) fn wall_between(graph: &WallGraph, a: WallNodeId, b: WallNodeId) -> Wall {
+	graph
+		.walls()
+		.find(|wall| {
+			(wall.origin, wall.destination) == (a, b) || (wall.origin, wall.destination) == (b, a)
+		})
+		.expect("no wall between the given nodes")
+}
+
+/// The single node at `position`, within a small tolerance.
+pub(super) fn node_at(graph: &WallGraph, position: Vec2) -> WallNodeId {
+	let matches: Vec<_> = graph
+		.nodes()
+		.filter(|(_, node_position)| node_position.distance(position) < 1e-4)
+		.map(|(id, _)| id)
+		.collect();
+	assert_eq!(
+		matches.len(),
+		1,
+		"expected one node at {position}, found {matches:?}"
+	);
+	matches[0]
+}
+
+/// The walls leaving a node in clockwise order, as their far nodes, starting from the one toward `first`.
+pub(super) fn neighbours_clockwise(
+	graph: &WallGraph,
+	node_id: WallNodeId,
+	first: WallNodeId,
+) -> Vec<WallNodeId> {
+	let start = find_edge(graph, node_id, first);
+	let mut neighbours = vec![first];
+	let mut current = graph.next_outgoing_half_edge_clockwise(start);
+	while current != start {
+		neighbours.push(graph.half_edge_destination(current));
+		current = graph.next_outgoing_half_edge_clockwise(current);
+	}
+	neighbours
+}
 
 /// Builds a graph with one node per position and returns the node IDs in the same order.
 pub(super) fn graph_with_nodes<const N: usize>(
 	positions: [(f32, f32); N],
 ) -> (WallGraph, [WallNodeId; N]) {
 	let mut graph = WallGraph::new();
-	let ids = positions.map(|(x, y)| graph.add_node(Vec2::new(x, y)));
+	let ids = positions.map(|(x, y)| graph.add_node(Vec2::new(x, y)).unwrap());
 	(graph, ids)
 }
 
@@ -16,13 +79,16 @@ pub(super) fn find_edge(graph: &WallGraph, from: WallNodeId, to: WallNodeId) -> 
 	*graph
 		.edges
 		.iter()
-		.find(|(id, edge)| edge.origin == from && graph.edge_destination(**id) == to)
+		.find(|(id, edge)| edge.origin == from && graph.half_edge_destination(**id) == to)
 		.map(|(id, _)| id)
 		.expect("no half-edge found between the given nodes")
 }
 
 pub(super) fn assert_consistent(graph: &WallGraph) {
-	if let Err(violation) = graph.validate() {
+	if let Err(violation) = graph.validate_topology() {
+		panic!("graph invariant violated: {violation}");
+	}
+	if let Err(violation) = graph.validate_geometry() {
 		panic!("graph invariant violated: {violation}");
 	}
 }
@@ -60,7 +126,10 @@ pub(super) fn walk(
 	let mut cycle = Vec::new();
 	let mut current = start;
 	loop {
-		cycle.push((graph.edge(current).origin, graph.edge_destination(current)));
+		cycle.push((
+			graph.edge(current).origin,
+			graph.half_edge_destination(current),
+		));
 		current = graph.edge(current).next;
 		assert!(
 			cycle.len() <= graph.edges.len(),

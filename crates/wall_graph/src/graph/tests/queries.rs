@@ -1,7 +1,7 @@
 use glam::Vec2;
 
-use crate::graph::test_support::graph_with_nodes;
-use crate::ids::WallNodeId;
+use crate::WallNodeId;
+use crate::graph::test_support::{add_single_wall, graph_with_nodes};
 
 #[test]
 fn nodes_lists_every_node_with_its_position() {
@@ -21,10 +21,10 @@ fn nodes_lists_every_node_with_its_position() {
 }
 
 #[test]
-fn walls_lists_each_wall_once_as_it_was_added() {
+fn walls_yields_each_wall_once() {
 	let (mut graph, [a, b, c]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]);
-	let first = graph.add_wall(a, b).unwrap();
-	let second = graph.add_wall(c, b).unwrap();
+	let first = add_single_wall(&mut graph, a, b);
+	let second = add_single_wall(&mut graph, c, b);
 
 	let mut walls: Vec<_> = graph.walls().collect();
 	walls.sort_by_key(|wall| wall.forward);

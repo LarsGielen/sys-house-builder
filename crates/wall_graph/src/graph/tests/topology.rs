@@ -1,11 +1,12 @@
 use crate::graph::test_support::{
-	add_walls, assert_consistent, flip_combinations, graph_with_nodes, permutations, walk,
+	add_single_wall, add_walls, assert_consistent, flip_combinations, graph_with_nodes,
+	permutations, walk,
 };
 
 #[test]
 fn isolated_wall_links_form_a_two_edge_loop() {
 	let (mut graph, [a, b]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0)]);
-	let wall = graph.add_wall(a, b).unwrap();
+	let wall = add_single_wall(&mut graph, a, b);
 
 	assert_ne!(wall.forward, wall.backward);
 	assert_eq!(graph.node(a).outgoing_edge, Some(wall.forward));
@@ -30,12 +31,12 @@ fn isolated_wall_links_form_a_two_edge_loop() {
 fn add_wall_returns_the_edges_running_each_way() {
 	let (mut graph, [a, b, c]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]);
 	graph.add_wall(a, b).unwrap();
-	let wall = graph.add_wall(c, b).unwrap();
+	let wall = add_single_wall(&mut graph, c, b);
 
 	assert_eq!(graph.edge(wall.forward).origin, c);
-	assert_eq!(graph.edge_destination(wall.forward), b);
+	assert_eq!(graph.half_edge_destination(wall.forward), b);
 	assert_eq!(graph.edge(wall.backward).origin, b);
-	assert_eq!(graph.edge_destination(wall.backward), c);
+	assert_eq!(graph.half_edge_destination(wall.backward), c);
 	assert_eq!((wall.origin, wall.destination), (c, b));
 }
 

@@ -7,11 +7,11 @@ const WALL_THICKNESS: f32 = 4.0;
 fn build_demo_graph() -> WallGraph {
 	let mut graph = WallGraph::new();
 
-	let bottom_left = graph.add_node(Vec2::new(-150.0, -100.0));
-	let bottom_right = graph.add_node(Vec2::new(150.0, -100.0));
-	let top_right = graph.add_node(Vec2::new(150.0, 100.0));
-	let top_left = graph.add_node(Vec2::new(-150.0, 100.0));
-	let door = graph.add_node(Vec2::new(250.0, 0.0));
+	let bottom_left = graph.add_node(Vec2::new(-150.0, -100.0)).unwrap();
+	let bottom_right = graph.add_node(Vec2::new(150.0, -100.0)).unwrap();
+	let top_right = graph.add_node(Vec2::new(150.0, 100.0)).unwrap();
+	let top_left = graph.add_node(Vec2::new(-150.0, 100.0)).unwrap();
+	let door = graph.add_node(Vec2::new(250.0, 0.0)).unwrap();
 
 	graph
 		.add_wall(bottom_left, bottom_right)
@@ -31,8 +31,8 @@ fn setup(mut commands: Commands) {
 
 	for wall in graph.walls() {
 		let (Some(from), Some(to)) = (
-			graph.node_position(wall.origin),
-			graph.node_position(wall.destination),
+			graph.node_position(wall.origin()),
+			graph.node_position(wall.destination()),
 		) else {
 			continue;
 		};

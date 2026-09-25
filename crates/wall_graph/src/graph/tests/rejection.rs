@@ -1,9 +1,25 @@
 use glam::Vec2;
 
-use crate::error::WallError;
+use crate::WallError;
+use crate::WallGraph;
 use crate::graph::test_support::{
 	assert_consistent, flip_combinations, graph_with_nodes, permutations,
 };
+
+#[test]
+fn non_finite_node_positions_are_rejected() {
+	let mut graph = WallGraph::new();
+
+	for position in [
+		Vec2::new(f32::NAN, 0.0),
+		Vec2::new(f32::INFINITY, 0.0),
+		Vec2::new(0.0, f32::NEG_INFINITY),
+	] {
+		assert_eq!(graph.add_node(position), Err(WallError::InvalidPosition));
+	}
+
+	assert_eq!(graph.nodes().count(), 0);
+}
 
 #[test]
 fn wall_to_a_node_of_another_graph_is_rejected() {
@@ -64,20 +80,32 @@ fn overlapping_walls_are_rejected_in_any_order_and_direction() {
 		[(1, 2), (0, 2)],
 		[(0, 2), (1, 2)],
 	];
+	let positions = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)];
 	for [first, second] in pairs {
 		for flipped in flip_combinations(2) {
-			let (mut graph, nodes) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]);
-			let wall = |(from, to): (usize, usize), flip: bool| {
-				if flip {
-					(nodes[to], nodes[from])
-				} else {
-					(nodes[from], nodes[to])
-				}
+			// The node left out of the first wall is added after it, so A-C doesn't simply run through B.
+			let mut graph = WallGraph::new();
+			let mut nodes = [None; 3];
+			for i in [first.0, first.1] {
+				nodes[i] = Some(graph.add_node(Vec2::from(positions[i])).unwrap());
+			}
+			let (from, to) = if flipped[0] {
+				(first.1, first.0)
+			} else {
+				first
 			};
+			graph
+				.add_wall(nodes[from].unwrap(), nodes[to].unwrap())
+				.unwrap();
+			let unused = (0..3).find(|&i| i != first.0 && i != first.1).unwrap();
+			nodes[unused] = Some(graph.add_node(Vec2::from(positions[unused])).unwrap());
+			let nodes = nodes.map(Option::unwrap);
 
-			let (from, to) = wall(first, flipped[0]);
-			graph.add_wall(from, to).unwrap();
-			let (from, to) = wall(second, flipped[1]);
+			let (from, to) = if flipped[1] {
+				(nodes[second.1], nodes[second.0])
+			} else {
+				(nodes[second.0], nodes[second.1])
+			};
 			assert_eq!(
 				graph.add_wall(from, to),
 				Err(WallError::Overlapping),
@@ -88,7 +116,7 @@ fn overlapping_walls_are_rejected_in_any_order_and_direction() {
 			assert_consistent(&graph);
 
 			// a rejected wall must not leave the graph in a state that breaks later walls
-			let d = graph.add_node(Vec2::new(0.0, 1.0));
+			let d = graph.add_node(Vec2::new(0.0, 1.0)).unwrap();
 			graph.add_wall(nodes[0], d).unwrap();
 			assert_eq!(graph.edges.len(), 4);
 			assert_consistent(&graph);
@@ -113,7 +141,7 @@ fn overlap_is_detected_among_many_walls_at_a_node() {
 				graph.add_wall(a, arm_nodes[i]).unwrap();
 			}
 
-			let far = graph.add_node(Vec2::new(beyond.0, beyond.1));
+			let far = graph.add_node(Vec2::new(beyond.0, beyond.1)).unwrap();
 			assert_eq!(
 				graph.add_wall(a, far),
 				Err(WallError::Overlapping),
