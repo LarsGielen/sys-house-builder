@@ -1,11 +1,11 @@
 use glam::Vec2;
 
-use crate::WallError;
-use crate::graph::DISTANCE_TOLERANCE;
-use crate::graph::test_support::{
+use super::support::{
 	add_single_wall, assert_consistent, graph_with_nodes, neighbours_clockwise, node_at,
 	permutations, sorted_pairs, walk, wall_node_pairs,
 };
+use crate::WallError;
+use crate::graph::DISTANCE_TOLERANCE;
 
 #[test]
 fn crossing_a_wall_makes_a_four_way_junction() {

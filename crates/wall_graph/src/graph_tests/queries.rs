@@ -1,7 +1,7 @@
 use glam::Vec2;
 
+use super::support::{add_single_wall, graph_with_nodes};
 use crate::WallNodeId;
-use crate::graph::test_support::{add_single_wall, graph_with_nodes};
 
 #[test]
 fn nodes_lists_every_node_with_its_position() {

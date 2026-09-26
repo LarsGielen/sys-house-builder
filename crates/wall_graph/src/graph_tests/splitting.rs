@@ -1,10 +1,10 @@
 use glam::Vec2;
 
-use crate::graph::DISTANCE_TOLERANCE;
-use crate::graph::test_support::{
+use super::support::{
 	add_single_wall, assert_consistent, graph_with_nodes, neighbours_clockwise, sorted_pairs, walk,
 	wall_node_pairs,
 };
+use crate::graph::DISTANCE_TOLERANCE;
 
 #[test]
 fn a_split_wall_keeps_its_direction_in_both_halves() {

@@ -1,11 +1,11 @@
 use glam::Vec2;
 
-use crate::WallError;
-use crate::graph::Wall;
-use crate::graph::test_support::{
+use super::support::{
 	add_single_wall, add_walls, assert_consistent, find_edge, flip_combinations, graph_with_nodes,
 	neighbours_clockwise, node_at, permutations, walk, wall_between, wall_node_pairs,
 };
+use crate::WallError;
+use crate::graph::Wall;
 
 fn reversed(wall: Wall) -> Wall {
 	Wall {

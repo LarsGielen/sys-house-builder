@@ -1,4 +1,4 @@
-use crate::graph::test_support::{
+use super::support::{
 	add_single_wall, add_walls, assert_consistent, flip_combinations, graph_with_nodes,
 	permutations, walk,
 };

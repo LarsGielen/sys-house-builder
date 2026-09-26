@@ -1,10 +1,8 @@
 use glam::Vec2;
 
+use super::support::{assert_consistent, flip_combinations, graph_with_nodes, permutations};
 use crate::WallError;
 use crate::WallGraph;
-use crate::graph::test_support::{
-	assert_consistent, flip_combinations, graph_with_nodes, permutations,
-};
 
 #[test]
 fn non_finite_node_positions_are_rejected() {

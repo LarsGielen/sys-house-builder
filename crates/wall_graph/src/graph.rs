@@ -829,6 +829,5 @@ impl WallGraph {
 }
 
 #[cfg(test)]
-mod test_support;
-#[cfg(test)]
+#[path = "graph_tests.rs"]
 mod tests;

@@ -1,6 +1,6 @@
 use glam::Vec2;
 
-use super::{HalfEdgeId, Wall, WallGraph, WallNodeId};
+use super::super::{HalfEdgeId, Wall, WallGraph, WallNodeId};
 
 /// Adds a wall that is expected not to meet any other wall, so it comes back whole.
 pub(super) fn add_single_wall(graph: &mut WallGraph, from: WallNodeId, to: WallNodeId) -> Wall {
