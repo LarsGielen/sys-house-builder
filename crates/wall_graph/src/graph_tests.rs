@@ -14,3 +14,6 @@ mod splitting;
 mod support;
 #[path = "graph_tests/topology.rs"]
 mod topology;
+
+#[path = "graph_tests/arcs.rs"]
+mod arcs;

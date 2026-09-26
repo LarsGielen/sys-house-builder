@@ -4,11 +4,13 @@ use std::fmt;
 
 use glam::Vec2;
 
-/// Departures from a node within this many radians are treated as collinear.
-const DIRECTION_ANGLE_TOLERANCE: f32 = 1e-6;
+use crate::geometry::{Curve, CurveShape, intersections};
 
-/// Points at most this far apart count as the same point, and a point this close to a line lies on it.
-const DISTANCE_TOLERANCE: f32 = 1e-4;
+/// Departures from a node within this many radians are treated as collinear.
+const DIRECTION_ANGLE_TOLERANCE: f32 = crate::geometry::ANGLE_TOLERANCE as f32;
+
+/// Points at most this far apart count as the same contact; point-on-curve tests use this tolerance.
+const DISTANCE_TOLERANCE: f32 = crate::geometry::DISTANCE_TOLERANCE as f32;
 
 /// Identifies a node in one [`WallGraph`].
 ///
@@ -28,14 +30,22 @@ pub enum WallError {
 	UnknownNode,
 	/// The wall would start and end at the same node.
 	SameNode,
-	/// The two nodes are already joined by a wall.
+	/// The same geometric path already joins these nodes.
 	Duplicate,
 	/// The wall runs along part of an existing wall.
 	Overlapping,
-	/// The endpoint positions are within the graph's distance tolerance.
+	/// A wall piece would have endpoints within the graph's distance tolerance.
 	ZeroLength,
+	/// Junction snapping cannot preserve the participating curves within distance tolerance.
+	InconsistentJunction,
 	/// The wall is not a wall of this graph, for example because it was already removed.
 	UnknownWall,
+	/// The sweep is invalid or the arc extends beyond representable coordinates.
+	InvalidArc,
+	/// Two departures have indistinguishable tangents; their ordering is unsupported.
+	TangentialContact,
+	/// A query parameter or sampling deviation is invalid or requests too many samples.
+	InvalidParameter,
 }
 
 impl fmt::Display for WallError {
@@ -44,10 +54,20 @@ impl fmt::Display for WallError {
 			WallError::InvalidPosition => "a node position must contain only finite coordinates",
 			WallError::UnknownNode => "a wall endpoint is not a node of this graph",
 			WallError::SameNode => "a wall cannot start and end at the same node",
-			WallError::Duplicate => "there is already a wall between these nodes",
+			WallError::Duplicate => "the same wall path already joins these nodes",
 			WallError::Overlapping => "the wall runs along part of an existing wall",
 			WallError::ZeroLength => "a wall cannot join nodes within the distance tolerance",
+			WallError::InconsistentJunction => {
+				"a junction cannot preserve wall geometry within the distance tolerance"
+			}
 			WallError::UnknownWall => "the wall is not a wall of this graph",
+			WallError::InvalidArc => {
+				"an arc needs representable coordinates and a finite sweep with magnitude greater than 0.000001 and less than one revolution"
+			}
+			WallError::TangentialContact => {
+				"walls with indistinguishable departure tangents are unsupported"
+			}
+			WallError::InvalidParameter => "invalid curve parameter or sampling deviation",
 		};
 		f.write_str(message)
 	}
@@ -55,75 +75,9 @@ impl fmt::Display for WallError {
 
 impl std::error::Error for WallError {}
 
-fn direction_angle_between(from: Vec2, to: Vec2) -> f32 {
-	(to - from).to_angle()
-}
-
 fn angular_distance(a: f32, b: f32) -> f32 {
 	let difference = (a - b).abs();
 	difference.min(TAU - difference)
-}
-
-/// A point's closest location on the line through `start` and `end`, which must be distinct.
-#[derive(Debug, Clone, Copy)]
-struct LineProjection {
-	line_parameter: f32,
-	perpendicular_distance: f32,
-}
-
-fn project_point_onto_line(point: Vec2, start: Vec2, end: Vec2) -> LineProjection {
-	let line = end - start;
-	let line_parameter = (point - start).dot(line) / line.length_squared();
-	LineProjection {
-		line_parameter,
-		perpendicular_distance: point.distance(start + line * line_parameter),
-	}
-}
-
-/// Whether `point` lies on the interior of the segment, excluding points within tolerance of either end.
-fn segment_strictly_contains_point(point: Vec2, start: Vec2, end: Vec2) -> bool {
-	let projection = project_point_onto_line(point, start, end);
-	projection.perpendicular_distance <= DISTANCE_TOLERANCE
-		&& (0.0..=1.0).contains(&projection.line_parameter)
-		&& point.distance(start) > DISTANCE_TOLERANCE
-		&& point.distance(end) > DISTANCE_TOLERANCE
-}
-
-/// Whether segments `a` and `b` are collinear and share a stretch longer than the distance tolerance.
-fn segments_have_collinear_overlap(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> bool {
-	// Measure against the longer segment: a very short one gives a poorly defined line.
-	let (long, short) = if a.0.distance(a.1) >= b.0.distance(b.1) {
-		(a, b)
-	} else {
-		(b, a)
-	};
-	let first = project_point_onto_line(short.0, long.0, long.1);
-	let second = project_point_onto_line(short.1, long.0, long.1);
-	if first.perpendicular_distance > DISTANCE_TOLERANCE
-		|| second.perpendicular_distance > DISTANCE_TOLERANCE
-	{
-		return false;
-	}
-	let low = first.line_parameter.min(second.line_parameter).max(0.0);
-	let high = first.line_parameter.max(second.line_parameter).min(1.0);
-	(high - low) * long.0.distance(long.1) > DISTANCE_TOLERANCE
-}
-
-/// The normalized parameters where segments `a` and `b` meet, including endpoint contact.
-///
-/// Returns `None` when they are parallel, including when they are collinear, or when they do not meet.
-fn segment_intersection_parameters(a: (Vec2, Vec2), b: (Vec2, Vec2)) -> Option<(f32, f32)> {
-	let a_direction = a.1 - a.0;
-	let b_direction = b.1 - b.0;
-	let denominator = a_direction.perp_dot(b_direction);
-	if denominator.abs() <= f32::EPSILON * a_direction.length() * b_direction.length() {
-		return None;
-	}
-	let between_starts = b.0 - a.0;
-	let along_a = between_starts.perp_dot(b_direction) / denominator;
-	let along_b = between_starts.perp_dot(a_direction) / denominator;
-	let within = |along: f32| (0.0..=1.0).contains(&along);
-	(within(along_a) && within(along_b)).then_some((along_a, along_b))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -175,7 +129,7 @@ struct NodeRingGap {
 	following_departure: HalfEdgeId,
 }
 
-/// A planar graph of wall corners joined by straight walls.
+/// A planar graph of wall junctions joined by straight segments and circular arcs.
 ///
 /// Adding a wall automatically divides it and any crossed walls at their junctions. Geometric
 /// comparisons use a fixed tolerance of `0.0001` coordinate units, so resulting wall pieces are
@@ -187,6 +141,8 @@ pub struct WallGraph {
 	next_edge_id: usize,
 	nodes: HashMap<WallNodeId, WallNode>,
 	edges: HashMap<HalfEdgeId, HalfEdge>,
+	// The smaller half-edge ID owns the shape in its forward direction.
+	shapes: HashMap<HalfEdgeId, CurveShape>,
 }
 
 impl WallGraph {
@@ -256,8 +212,18 @@ impl WallGraph {
 		id
 	}
 
-	fn direction_angle_between_nodes(&self, from: WallNodeId, to: WallNodeId) -> f32 {
-		direction_angle_between(self.node(from).position, self.node(to).position)
+	fn half_edge_curve(&self, edge_id: HalfEdgeId) -> Curve {
+		let twin = self.edge(edge_id).twin;
+		let shape = self.shapes[&edge_id.min(twin)];
+		Curve::new(
+			self.node(self.edge(edge_id).origin).position,
+			self.node(self.half_edge_destination(edge_id)).position,
+			if edge_id < twin {
+				shape
+			} else {
+				shape.reversed()
+			},
+		)
 	}
 
 	fn half_edge_destination(&self, edge_id: HalfEdgeId) -> WallNodeId {
@@ -288,10 +254,10 @@ impl WallGraph {
 			.into_iter()
 			.map(|edge_id| {
 				(
-					self.direction_angle_between_nodes(
-						node_id,
-						self.half_edge_destination(edge_id),
-					),
+					self.half_edge_curve(edge_id)
+						.tangent(0.0)
+						.as_vec2()
+						.to_angle(),
 					edge_id,
 				)
 			})
@@ -322,36 +288,90 @@ impl WallGraph {
 		origin_id: WallNodeId,
 		destination_id: WallNodeId,
 	) -> Result<Vec<Wall>, WallError> {
+		self.add_curve(origin_id, destination_id, CurveShape::Straight)
+	}
+
+	/// Adds a circular arc between existing nodes, splitting all contacts just like [`Self::add_wall`].
+	///
+	/// `signed_sweep` is in radians: positive is counterclockwise, negative clockwise. Its magnitude
+	/// must be greater than `0.000001` and less than one full revolution. Major arcs are supported;
+	/// full circles and tangential junctions are not. Distinct paths may join the same endpoints.
+	/// On error, the graph (including identifier allocation) is unchanged.
+	pub fn add_arc(
+		&mut self,
+		origin_id: WallNodeId,
+		destination_id: WallNodeId,
+		signed_sweep: f32,
+	) -> Result<Vec<Wall>, WallError> {
+		if !signed_sweep.is_finite()
+			|| signed_sweep.abs() <= DIRECTION_ANGLE_TOLERANCE
+			|| signed_sweep.abs() >= TAU
+		{
+			return Err(WallError::InvalidArc);
+		}
+		self.add_curve(
+			origin_id,
+			destination_id,
+			CurveShape::CircularArc {
+				sweep: signed_sweep as f64,
+			},
+		)
+	}
+
+	fn add_curve(
+		&mut self,
+		origin_id: WallNodeId,
+		destination_id: WallNodeId,
+		shape: CurveShape,
+	) -> Result<Vec<Wall>, WallError> {
 		self.validate_wall_endpoints(origin_id, destination_id)?;
-		let plan = self.plan_wall_insertion(origin_id, destination_id)?;
-
-		for (wall, node_id) in plan.wall_splits_at_existing_nodes {
-			self.split_wall_at_node(wall, node_id);
+		let curve = Curve::new(
+			self.node(origin_id).position,
+			self.node(destination_id).position,
+			shape,
+		);
+		if !curve.valid() {
+			return Err(WallError::InvalidArc);
 		}
-
-		let mut path = vec![origin_id];
-		for breakpoint in plan.path_breakpoints {
-			path.push(match breakpoint {
-				PathBreakpoint::ExistingNode(node_id) => node_id,
-				PathBreakpoint::Crossing { walls, position } => {
-					let node_id = self.insert_node(position);
-					for wall in walls {
-						self.split_wall_at_node(wall, node_id);
-					}
-					node_id
-				}
-			});
-		}
-		path.push(destination_id);
-
-		let walls = path
-			.windows(2)
-			.map(|pair| self.insert_wall_unchecked(pair[0], pair[1]))
+		let plan = self.plan_wall_insertion(origin_id, destination_id, curve)?;
+		let junction_ids: Vec<_> = plan
+			.junctions
+			.iter()
+			.map(|junction| {
+				junction
+					.existing_node
+					.unwrap_or_else(|| self.insert_node(junction.position))
+			})
 			.collect();
-
+		let resolve = |node: PlannedNode| match node {
+			PlannedNode::Existing(id) => id,
+			PlannedNode::Junction(index) => junction_ids[index],
+		};
+		for (wall, _) in &plan.replacements {
+			self.remove_wall_unchecked(*wall);
+		}
+		for (_, pieces) in plan.replacements {
+			for piece in pieces {
+				self.insert_wall_unchecked(
+					resolve(piece.origin),
+					resolve(piece.destination),
+					piece.shape,
+				);
+			}
+		}
+		let walls = plan
+			.additions
+			.into_iter()
+			.map(|piece| {
+				self.insert_wall_unchecked(
+					resolve(piece.origin),
+					resolve(piece.destination),
+					piece.shape,
+				)
+			})
+			.collect();
 		debug_assert_eq!(self.validate_topology(), Ok(()));
 		debug_assert_eq!(self.validate_geometry(), Ok(()));
-
 		Ok(walls)
 	}
 
@@ -373,20 +393,12 @@ impl WallGraph {
 		Ok(())
 	}
 
-	/// Replaces `wall` with two walls meeting at an existing node on its interior.
-	///
-	/// Callers must ensure the wall and node are valid; the original wall handle is invalidated.
-	fn split_wall_at_node(&mut self, wall: Wall, node_id: WallNodeId) {
-		self.remove_wall_unchecked(wall);
-		self.insert_wall_unchecked(wall.origin, node_id);
-		self.insert_wall_unchecked(node_id, wall.destination);
-	}
-
 	fn remove_wall_unchecked(&mut self, wall: Wall) {
 		self.detach_wall_end_from_node_ring(wall.forward, wall.backward);
 		self.detach_wall_end_from_node_ring(wall.backward, wall.forward);
 		self.edges.remove(&wall.forward);
 		self.edges.remove(&wall.backward);
+		self.shapes.remove(&wall.forward.min(wall.backward));
 	}
 
 	fn detach_wall_end_from_node_ring(&mut self, leaving: HalfEdgeId, arriving: HalfEdgeId) {
@@ -405,19 +417,26 @@ impl WallGraph {
 	}
 
 	/// Inserts a wall after callers have established that the operation preserves graph invariants.
-	fn insert_wall_unchecked(&mut self, origin_id: WallNodeId, destination_id: WallNodeId) -> Wall {
+	fn insert_wall_unchecked(
+		&mut self,
+		origin_id: WallNodeId,
+		destination_id: WallNodeId,
+		shape: CurveShape,
+	) -> Wall {
 		let forward_id = self.allocate_edge_id();
 		let backward_id = self.allocate_edge_id();
 
-		let origin_gap = self.find_node_ring_gap(
-			origin_id,
-			self.direction_angle_between_nodes(origin_id, destination_id),
+		let curve = Curve::new(
+			self.node(origin_id).position,
+			self.node(destination_id).position,
+			shape,
 		);
-		let destination_gap = self.find_node_ring_gap(
-			destination_id,
-			self.direction_angle_between_nodes(destination_id, origin_id),
-		);
+		let origin_gap =
+			self.find_node_ring_gap(origin_id, curve.tangent(0.0).as_vec2().to_angle());
+		let destination_gap =
+			self.find_node_ring_gap(destination_id, (-curve.tangent(1.0)).as_vec2().to_angle());
 
+		self.shapes.insert(forward_id, shape);
 		self.edges.insert(
 			forward_id,
 			HalfEdge {
@@ -475,203 +494,336 @@ impl WallGraph {
 			})
 	}
 
+	/// Evaluates a live wall at a normalized parameter in `[0, 1]`, in the handle's direction.
+	/// Returns `None` for a stale handle or invalid parameter. Parameters do not generally measure distance.
+	pub fn wall_position(&self, wall: Wall, parameter: f32) -> Option<Vec2> {
+		self.validate_wall_handle(wall).ok()?;
+		(0.0..=1.0).contains(&parameter).then(|| {
+			self.half_edge_curve(wall.forward)
+				.position(parameter as f64)
+				.as_vec2()
+		})
+	}
+
+	/// Returns the unit tangent in the handle's direction, or `None` for invalid input.
+	pub fn wall_tangent(&self, wall: Wall, parameter: f32) -> Option<Vec2> {
+		self.validate_wall_handle(wall).ok()?;
+		(0.0..=1.0).contains(&parameter).then(|| {
+			self.half_edge_curve(wall.forward)
+				.tangent(parameter as f64)
+				.as_vec2()
+		})
+	}
+
+	/// Returns the path length of a live wall, or `None` for a stale handle.
+	pub fn wall_length(&self, wall: Wall) -> Option<f64> {
+		self.validate_wall_handle(wall).ok()?;
+		Some(self.half_edge_curve(wall.forward).length())
+	}
+
+	/// Samples a wall in handle order, including both endpoints, for rendering or export.
+	///
+	/// `max_deviation` is a positive finite world-space chord error, before rounding to `Vec2`.
+	/// Requests needing more than 65,536 segments return [`WallError::InvalidParameter`].
+	/// Sampling never introduces graph nodes.
+	pub fn sample_wall(&self, wall: Wall, max_deviation: f32) -> Result<Vec<Vec2>, WallError> {
+		self.validate_wall_handle(wall)?;
+		if !max_deviation.is_finite() || max_deviation <= 0.0 {
+			return Err(WallError::InvalidParameter);
+		}
+		let curve = self.half_edge_curve(wall.forward);
+		let count = curve.sample_count(max_deviation as f64);
+		if count > 65_536 {
+			return Err(WallError::InvalidParameter);
+		}
+		Ok((0..=count)
+			.map(|index| curve.position(index as f64 / count as f64).as_vec2())
+			.collect())
+	}
+
 	/// The position of a node, or `None` if it isn't a node of this graph.
 	pub fn node_position(&self, node_id: WallNodeId) -> Option<Vec2> {
 		self.nodes.get(&node_id).map(|node| node.position)
 	}
 }
 
-/// A point along a new wall where it must be divided.
-enum PathBreakpoint {
-	ExistingNode(WallNodeId),
-	Crossing { walls: Vec<Wall>, position: Vec2 },
+/// Nodes are allocated only after the complete insertion plan has passed validation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlannedNode {
+	Existing(WallNodeId),
+	Junction(usize),
+}
+
+struct Junction {
+	parameter: f64,
+	position: Vec2,
+	existing_node: Option<WallNodeId>,
+}
+
+struct RawContact {
+	parameter: f64,
+	position: Vec2,
+	existing_node: Option<WallNodeId>,
+	crossed_wall: Option<Wall>,
+}
+
+struct PlannedPiece {
+	origin: PlannedNode,
+	destination: PlannedNode,
+	shape: CurveShape,
 }
 
 struct WallInsertionPlan {
-	wall_splits_at_existing_nodes: Vec<(Wall, WallNodeId)>,
-	path_breakpoints: Vec<PathBreakpoint>,
-}
-
-struct BreakpointGroup {
-	representative_position: Vec2,
-	existing_nodes: Vec<WallNodeId>,
-	crossing_walls: Vec<Wall>,
+	junctions: Vec<Junction>,
+	replacements: Vec<(Wall, Vec<PlannedPiece>)>,
+	additions: Vec<PlannedPiece>,
 }
 
 impl WallGraph {
+	fn planned_position(&self, node: PlannedNode, junctions: &[Junction]) -> Vec2 {
+		match node {
+			PlannedNode::Existing(id) => self.node(id).position,
+			PlannedNode::Junction(index) => junctions[index].position,
+		}
+	}
+
+	fn planned_curve(&self, piece: &PlannedPiece, junctions: &[Junction]) -> Curve {
+		Curve::new(
+			self.planned_position(piece.origin, junctions),
+			self.planned_position(piece.destination, junctions),
+			piece.shape,
+		)
+	}
+
 	fn plan_wall_insertion(
 		&self,
 		origin_id: WallNodeId,
 		destination_id: WallNodeId,
+		curve: Curve,
 	) -> Result<WallInsertionPlan, WallError> {
-		let start = self.node(origin_id).position;
-		let end = self.node(destination_id).position;
-		let is_end = |node_id: WallNodeId| node_id == origin_id || node_id == destination_id;
-
-		let mut raw_breakpoints: Vec<(f32, PathBreakpoint)> = self
-			.nodes()
-			.filter(|&(node_id, position)| {
-				!is_end(node_id) && segment_strictly_contains_point(position, start, end)
-			})
-			.map(|(node_id, position)| {
-				let line_parameter = project_point_onto_line(position, start, end).line_parameter;
-				(line_parameter, PathBreakpoint::ExistingNode(node_id))
-			})
-			.collect();
-		let mut wall_splits_at_existing_nodes = Vec::new();
-
-		for wall in self.walls() {
-			let wall_start = self.node(wall.origin).position;
-			let wall_end = self.node(wall.destination).position;
-			if segments_have_collinear_overlap((start, end), (wall_start, wall_end)) {
+		let mut walls: Vec<_> = self.walls().collect();
+		walls.sort_by_key(|wall| wall.forward);
+		let mut raw_contacts = Vec::new();
+		for (node_id, position) in self.nodes() {
+			if node_id == origin_id || node_id == destination_id {
+				continue;
+			}
+			if let Some(parameter) = curve.interior_parameter(position.as_dvec2()) {
+				raw_contacts.push(RawContact {
+					parameter,
+					position,
+					existing_node: Some(node_id),
+					crossed_wall: None,
+				});
+			}
+		}
+		for &wall in &walls {
+			let existing = self.half_edge_curve(wall.forward);
+			let same_endpoints = (wall.origin == origin_id && wall.destination == destination_id)
+				|| (wall.origin == destination_id && wall.destination == origin_id);
+			if same_endpoints && existing.same_path(curve) {
+				return Err(WallError::Duplicate);
+			}
+			let contacts = intersections(curve, existing);
+			if contacts.overlapping {
 				return Err(WallError::Overlapping);
 			}
-			// Other than overlapping, a wall sharing a node with the new one can only meet it there.
-			if is_end(wall.origin) || is_end(wall.destination) {
-				continue;
-			}
-
-			let mut end_on_wall = false;
-			for (node_id, position) in [(origin_id, start), (destination_id, end)] {
-				if segment_strictly_contains_point(position, wall_start, wall_end) {
-					wall_splits_at_existing_nodes.push((wall, node_id));
-					end_on_wall = true;
+			for contact in contacts.contacts {
+				let parameter = contact.first_parameter;
+				let other_parameter = contact.second_parameter;
+				let position = curve.position(parameter).as_vec2();
+				if contact.tangential
+					&& (curve.interior_parameter(position.as_dvec2()).is_some()
+						|| existing.interior_parameter(position.as_dvec2()).is_some())
+				{
+					return Err(WallError::TangentialContact);
+				}
+				// Endpoint contacts are represented by the existing-node scan and the endpoint splits below.
+				if curve.interior_parameter(position.as_dvec2()).is_some()
+					&& existing
+						.interior_parameter(existing.position(other_parameter))
+						.is_some()
+				{
+					raw_contacts.push(RawContact {
+						parameter,
+						position,
+						existing_node: None,
+						crossed_wall: Some(wall),
+					});
 				}
 			}
-			if end_on_wall {
-				continue;
-			}
-
-			if let Some((line_parameter, _)) =
-				segment_intersection_parameters((start, end), (wall_start, wall_end))
+		}
+		raw_contacts.sort_by(|a, b| {
+			a.parameter
+				.total_cmp(&b.parameter)
+				.then_with(|| a.position.x.total_cmp(&b.position.x))
+				.then_with(|| a.position.y.total_cmp(&b.position.y))
+				.then_with(|| a.existing_node.cmp(&b.existing_node))
+		});
+		let mut groups: Vec<Vec<RawContact>> = Vec::new();
+		for contact in raw_contacts {
+			if let Some(group) = groups
+				.last_mut()
+				.filter(|group| group[0].position.distance(contact.position) <= DISTANCE_TOLERANCE)
 			{
-				let position = start.lerp(end, line_parameter);
-				// Contact within tolerance of an endpoint is represented by that existing node.
-				let clear_of_endpoints = [start, end, wall_start, wall_end]
-					.iter()
-					.all(|endpoint| endpoint.distance(position) > DISTANCE_TOLERANCE);
-				if clear_of_endpoints {
-					raw_breakpoints.push((
-						line_parameter,
-						PathBreakpoint::Crossing {
-							walls: vec![wall],
-							position,
-						},
-					));
-				}
+				group.push(contact);
+			} else {
+				groups.push(vec![contact]);
 			}
 		}
-
-		let path_breakpoints =
-			self.normalize_path_breakpoints(raw_breakpoints, &mut wall_splits_at_existing_nodes)?;
-		let mut path_positions = vec![start];
-		path_positions.extend(path_breakpoints.iter().map(|breakpoint| match breakpoint {
-			PathBreakpoint::ExistingNode(node_id) => self.node(*node_id).position,
-			PathBreakpoint::Crossing { position, .. } => *position,
-		}));
-		path_positions.push(end);
-		if path_positions
-			.windows(2)
-			.any(|pair| pair[0].distance(pair[1]) <= DISTANCE_TOLERANCE)
-		{
-			return Err(WallError::ZeroLength);
+		let mut junctions = Vec::new();
+		for group in groups {
+			let representative = group[0].position;
+			let existing_node = group
+				.iter()
+				.filter_map(|contact| contact.existing_node)
+				.min_by(|a, b| {
+					self.node(*a)
+						.position
+						.distance(representative)
+						.total_cmp(&self.node(*b).position.distance(representative))
+						.then_with(|| a.cmp(b))
+				});
+			let position = existing_node.map_or(representative, |id| self.node(id).position);
+			let parameter = curve
+				.interior_parameter(position.as_dvec2())
+				.ok_or(WallError::InconsistentJunction)?;
+			for contact in &group {
+				if let Some(wall) = contact.crossed_wall
+					&& self
+						.half_edge_curve(wall.forward)
+						.interior_parameter(position.as_dvec2())
+						.is_none()
+				{
+					return Err(WallError::InconsistentJunction);
+				}
+			}
+			junctions.push(Junction {
+				parameter,
+				position,
+				existing_node,
+			});
 		}
-		Ok(WallInsertionPlan {
-			wall_splits_at_existing_nodes,
-			path_breakpoints,
-		})
+		junctions.sort_by(|a, b| a.parameter.total_cmp(&b.parameter));
+		let junction_node = |index: usize| {
+			junctions[index]
+				.existing_node
+				.map_or(PlannedNode::Junction(index), PlannedNode::Existing)
+		};
+		let mut path = vec![(0.0, PlannedNode::Existing(origin_id))];
+		path.extend(
+			junctions
+				.iter()
+				.enumerate()
+				.map(|(index, junction)| (junction.parameter, junction_node(index))),
+		);
+		path.push((1.0, PlannedNode::Existing(destination_id)));
+		let additions = self.plan_pieces(curve, &path, &junctions)?;
+		let mut replacements = Vec::new();
+		for wall in walls {
+			let existing = self.half_edge_curve(wall.forward);
+			let mut cuts = vec![(0.0, PlannedNode::Existing(wall.origin))];
+			for &(_, node) in &path {
+				if let Some(parameter) =
+					existing.interior_parameter(self.planned_position(node, &junctions).as_dvec2())
+				{
+					cuts.push((parameter, node));
+				}
+			}
+			cuts.push((1.0, PlannedNode::Existing(wall.destination)));
+			cuts.sort_by(|a, b| a.0.total_cmp(&b.0));
+			cuts.dedup_by(|a, b| a.1 == b.1);
+			if cuts.len() > 2 {
+				replacements.push((wall, self.plan_pieces(existing, &cuts, &junctions)?));
+			}
+		}
+		let plan = WallInsertionPlan {
+			junctions,
+			replacements,
+			additions,
+		};
+		self.validate_planned_departures(&plan)?;
+		Ok(plan)
 	}
 
-	fn normalize_path_breakpoints(
+	fn plan_pieces(
 		&self,
-		mut raw_breakpoints: Vec<(f32, PathBreakpoint)>,
-		wall_splits_at_existing_nodes: &mut Vec<(Wall, WallNodeId)>,
-	) -> Result<Vec<PathBreakpoint>, WallError> {
-		let position_of = |breakpoint: &PathBreakpoint| match breakpoint {
-			PathBreakpoint::ExistingNode(node_id) => self.node(*node_id).position,
-			PathBreakpoint::Crossing { position, .. } => *position,
-		};
-		raw_breakpoints.sort_by(|a, b| {
-			let a_position = position_of(&a.1);
-			let b_position = position_of(&b.1);
-			a.0.total_cmp(&b.0)
-				.then_with(|| a_position.x.total_cmp(&b_position.x))
-				.then_with(|| a_position.y.total_cmp(&b_position.y))
-		});
-		let mut groups: Vec<BreakpointGroup> = Vec::new();
-
-		for (_, breakpoint) in raw_breakpoints {
-			let position = match &breakpoint {
-				PathBreakpoint::ExistingNode(node_id) => self.node(*node_id).position,
-				PathBreakpoint::Crossing { position, .. } => *position,
-			};
-			let group = groups.last_mut().filter(|group| {
-				group.representative_position.distance(position) <= DISTANCE_TOLERANCE
-			});
-			let group = match group {
-				Some(group) => group,
-				None => {
-					groups.push(BreakpointGroup {
-						representative_position: position,
-						existing_nodes: Vec::new(),
-						crossing_walls: Vec::new(),
-					});
-					groups.last_mut().unwrap()
+		original: Curve,
+		cuts: &[(f64, PlannedNode)],
+		junctions: &[Junction],
+	) -> Result<Vec<PlannedPiece>, WallError> {
+		cuts.windows(2)
+			.map(|pair| {
+				let piece = PlannedPiece {
+					origin: pair[0].1,
+					destination: pair[1].1,
+					shape: original.subcurve(pair[0].0, pair[1].0).shape,
+				};
+				let curve = self.planned_curve(&piece, junctions);
+				if !curve.valid() || curve.length() <= DISTANCE_TOLERANCE as f64 {
+					return Err(WallError::ZeroLength);
 				}
-			};
-			match breakpoint {
-				PathBreakpoint::ExistingNode(node_id) => group.existing_nodes.push(node_id),
-				PathBreakpoint::Crossing { walls, .. } => {
-					group.crossing_walls.extend(walls);
+				// Bound deviation over the entire subcurve, not just a few sampled points.
+				if curve.deviation_from(original, pair[0].0, pair[1].0) > DISTANCE_TOLERANCE as f64
+				{
+					return Err(WallError::InconsistentJunction);
 				}
-			}
-		}
-
-		groups
-			.into_iter()
-			.map(|mut group| {
-				group.existing_nodes.sort_by(|a, b| {
-					let a_distance = self
-						.node(*a)
-						.position
-						.distance(group.representative_position);
-					let b_distance = self
-						.node(*b)
-						.position
-						.distance(group.representative_position);
-					a_distance.total_cmp(&b_distance).then_with(|| a.cmp(b))
-				});
-				group.existing_nodes.dedup();
-				if let Some(&node_id) = group.existing_nodes.first() {
-					let position = self.node(node_id).position;
-					for wall in group.crossing_walls {
-						let wall_start = self.node(wall.origin).position;
-						let wall_end = self.node(wall.destination).position;
-						if !segment_strictly_contains_point(position, wall_start, wall_end) {
-							return Err(WallError::ZeroLength);
-						}
-						if !wall_splits_at_existing_nodes.contains(&(wall, node_id)) {
-							wall_splits_at_existing_nodes.push((wall, node_id));
-						}
-					}
-					Ok(PathBreakpoint::ExistingNode(node_id))
-				} else {
-					let position = group.representative_position;
-					let mut walls = Vec::new();
-					for wall in group.crossing_walls {
-						let wall_start = self.node(wall.origin).position;
-						let wall_end = self.node(wall.destination).position;
-						if !segment_strictly_contains_point(position, wall_start, wall_end) {
-							return Err(WallError::ZeroLength);
-						}
-						if !walls.contains(&wall) {
-							walls.push(wall);
-						}
-					}
-					Ok(PathBreakpoint::Crossing { walls, position })
-				}
+				Ok(piece)
 			})
 			.collect()
+	}
+
+	fn validate_planned_departures(&self, plan: &WallInsertionPlan) -> Result<(), WallError> {
+		let mut departures: Vec<(PlannedNode, f32, CurveShape)> = Vec::new();
+		let replaced: Vec<_> = plan
+			.replacements
+			.iter()
+			.map(|(wall, _)| wall.forward)
+			.collect();
+		for piece in plan
+			.additions
+			.iter()
+			.chain(plan.replacements.iter().flat_map(|(_, pieces)| pieces))
+		{
+			let curve = self.planned_curve(piece, &plan.junctions);
+			for (node, direction) in [
+				(piece.origin, curve.tangent(0.0)),
+				(piece.destination, -curve.tangent(1.0)),
+			] {
+				let angle = direction.as_vec2().to_angle();
+				let reject = |other_angle, other_shape| {
+					if angular_distance(angle, other_angle) < DIRECTION_ANGLE_TOLERANCE {
+						Err(
+							if piece.shape == CurveShape::Straight
+								&& other_shape == CurveShape::Straight
+							{
+								WallError::Overlapping
+							} else {
+								WallError::TangentialContact
+							},
+						)
+					} else {
+						Ok(())
+					}
+				};
+				for &(other_node, other_angle, other_shape) in &departures {
+					if node == other_node {
+						reject(other_angle, other_shape)?;
+					}
+				}
+				if let PlannedNode::Existing(id) = node {
+					for edge in self.outgoing_half_edges(id) {
+						if replaced.contains(&edge.min(self.edge(edge).twin)) {
+							continue;
+						}
+						let existing = self.half_edge_curve(edge);
+						reject(existing.tangent(0.0).as_vec2().to_angle(), existing.shape)?;
+					}
+				}
+				departures.push((node, angle, piece.shape));
+			}
+		}
+		Ok(())
 	}
 
 	fn validate_wall_endpoints(
@@ -691,9 +843,7 @@ impl WallGraph {
 		{
 			return Err(WallError::ZeroLength);
 		}
-		self.reject_duplicate_wall(origin_id, destination_id)?;
-		self.reject_collinear_departure(origin_id, destination_id)?;
-		self.reject_collinear_departure(destination_id, origin_id)
+		Ok(())
 	}
 
 	fn validate_wall_handle(&self, wall: Wall) -> Result<(), WallError> {
@@ -766,13 +916,41 @@ impl WallGraph {
 				return Err(format!("{node_id:?} has a non-finite position"));
 			}
 		}
+		if self.shapes.len() * 2 != self.edges.len() {
+			return Err("wall geometry count does not match half-edge count".into());
+		}
 		for wall in self.walls() {
-			let length = self
-				.node(wall.origin)
-				.position
-				.distance(self.node(wall.destination).position);
-			if length <= DISTANCE_TOLERANCE {
-				return Err(format!("{wall:?} is shorter than the distance tolerance"));
+			if !self.shapes.contains_key(&wall.forward) {
+				return Err(format!("{wall:?} has no geometry"));
+			}
+			let curve = self.half_edge_curve(wall.forward);
+			if !curve.valid() || curve.length() <= DISTANCE_TOLERANCE as f64 {
+				return Err(format!("{wall:?} has invalid geometry"));
+			}
+		}
+		for &node_id in self.nodes.keys() {
+			let mut departures: Vec<_> = self
+				.edges
+				.iter()
+				.filter(|(_, edge)| edge.origin == node_id)
+				.map(|(&id, _)| {
+					(
+						self.half_edge_curve(id).tangent(0.0).as_vec2().to_angle(),
+						id,
+					)
+				})
+				.collect();
+			departures.sort_by(|a, b| a.0.total_cmp(&b.0));
+			for (index, &(angle, edge)) in departures.iter().enumerate() {
+				let previous = departures[(index + departures.len() - 1) % departures.len()];
+				if self.next_outgoing_half_edge_clockwise(edge) != previous.1 {
+					return Err(format!("{node_id:?} departures are not ordered by tangent"));
+				}
+				if departures.len() > 1
+					&& angular_distance(angle, previous.0) < DIRECTION_ANGLE_TOLERANCE
+				{
+					return Err(format!("{node_id:?} has ambiguous departure tangents"));
+				}
 			}
 		}
 		Ok(())
@@ -787,43 +965,6 @@ impl WallGraph {
 			Ok(())
 		} else {
 			Err(WallError::UnknownNode)
-		}
-	}
-
-	fn reject_duplicate_wall(
-		&self,
-		origin_id: WallNodeId,
-		destination_id: WallNodeId,
-	) -> Result<(), WallError> {
-		let exists = self
-			.outgoing_half_edges(origin_id)
-			.into_iter()
-			.any(|edge_id| self.half_edge_destination(edge_id) == destination_id);
-		if exists {
-			Err(WallError::Duplicate)
-		} else {
-			Ok(())
-		}
-	}
-
-	fn reject_collinear_departure(
-		&self,
-		node_id: WallNodeId,
-		toward_id: WallNodeId,
-	) -> Result<(), WallError> {
-		let angle = self.direction_angle_between_nodes(node_id, toward_id);
-		let overlaps = self
-			.outgoing_half_edges(node_id)
-			.into_iter()
-			.any(|edge_id| {
-				let existing_angle = self
-					.direction_angle_between_nodes(node_id, self.half_edge_destination(edge_id));
-				angular_distance(angle, existing_angle) < DIRECTION_ANGLE_TOLERANCE
-			});
-		if overlaps {
-			Err(WallError::Overlapping)
-		} else {
-			Ok(())
 		}
 	}
 }
