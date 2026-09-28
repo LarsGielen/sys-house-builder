@@ -40,6 +40,13 @@ Splitting an arc across `[a, b]` keeps it circular with sweep
 endpoints. These pieces can have smaller sweeps than the minimum permitted for
 a newly requested arc.
 
+After insertion, two pieces can merge through a node with exactly two incident
+walls if their directed tangents align and one shape represents both within the
+distance tolerance. Straight pieces become one segment; circular pieces must
+turn the same way and combine to a sweep below one revolution. Different curve
+types, bends, branch junctions, and full circles stay separate. A successful
+merge removes its middle node and invalidates both old wall handles.
+
 ## Contacts, snapping, and rejection
 
 The geometry module handles segment–segment, segment–arc, and arc–arc
@@ -71,8 +78,10 @@ creating two nearly coincident junctions.
 Other errors include `InvalidPosition` for non-finite endpoints,
 `InvalidArc` for an invalid sweep or unrepresentable arc, and `ZeroLength`
 when requested endpoints or a resulting piece are too close. `UnknownWall`
-means a handle has been removed or split; `InvalidParameter` covers invalid
-sampling deviation or excessive sample count. `UnknownNode` and `SameNode`
+means a handle has been removed, split, or merged; `InvalidParameter` covers
+invalid sampling deviation or excessive sample count. `IdExhausted` means
+insertion needs more node or half-edge IDs than the counters can represent;
+the graph is unchanged. `UnknownNode` and `SameNode`
 remain in the error type for the internal node-targeted insertion path but
 are not produced by the public position-based insertion methods.
 

@@ -168,7 +168,7 @@ impl WallGraph {
 		if !position.is_finite() {
 			return Err(WallError::InvalidPosition);
 		}
-		Ok(self.insert_node(position))
+		self.insert_node(position)
 	}
 
 	pub(super) fn add_wall_between_nodes(

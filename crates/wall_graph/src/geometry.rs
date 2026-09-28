@@ -74,6 +74,48 @@ impl Curve {
 		}
 	}
 
+	/// Returns one shape only when replacing both paths stays within the graph's tolerance.
+	pub(crate) fn merged_shape(self, next: Self) -> Option<CurveShape> {
+		if self.end != next.start
+			|| self.tangent(1.0).dot(next.tangent(0.0)) <= 0.0
+			|| self.tangent(1.0).perp_dot(next.tangent(0.0)).abs() >= ANGLE_TOLERANCE
+		{
+			return None;
+		}
+		let shape = match (self.shape, next.shape) {
+			(CurveShape::Straight, CurveShape::Straight) => CurveShape::Straight,
+			(
+				CurveShape::CircularArc { sweep: first },
+				CurveShape::CircularArc { sweep: second },
+			) if first.signum() == second.signum() && (first + second).abs() < TAU => {
+				CurveShape::CircularArc {
+					sweep: first + second,
+				}
+			}
+			_ => return None,
+		};
+		let joined = Self {
+			start: self.start,
+			end: next.end,
+			shape,
+		};
+		if !joined.valid() {
+			return None;
+		}
+		let split = match shape {
+			CurveShape::Straight => self.length() / (self.length() + next.length()),
+			CurveShape::CircularArc { sweep } => {
+				let CurveShape::CircularArc { sweep: first } = self.shape else {
+					unreachable!()
+				};
+				first / sweep
+			}
+		};
+		(joined.subcurve(0.0, split).deviation_from(self, 0.0, 1.0) <= DISTANCE_TOLERANCE
+			&& joined.subcurve(split, 1.0).deviation_from(next, 0.0, 1.0) <= DISTANCE_TOLERANCE)
+			.then_some(shape)
+	}
+
 	pub(crate) fn valid(self) -> bool {
 		if !self.start.is_finite()
 			|| !self.end.is_finite()
@@ -154,6 +196,34 @@ impl Curve {
 		match self.shape {
 			CurveShape::Straight => self.start.distance(self.end),
 			CurveShape::CircularArc { sweep } => self.circle().unwrap().1 * sweep.abs(),
+		}
+	}
+
+	pub(crate) fn closest_parameter(self, point: DVec2) -> f64 {
+		match self.shape {
+			CurveShape::Straight => {
+				let chord = self.end - self.start;
+				((point - self.start).dot(chord) / chord.length_squared()).clamp(0.0, 1.0)
+			}
+			CurveShape::CircularArc { .. } => {
+				let (center, radius) = self.circle().expect("valid arc");
+				let radial = point - center;
+				let mut candidates = vec![0.0, 1.0];
+				if radial.length_squared() > 0.0 {
+					let projected = center + radial.normalize() * radius;
+					if let Some(parameter) = self.parameter_of(projected) {
+						candidates.push(parameter);
+					}
+				}
+				candidates
+					.into_iter()
+					.min_by(|&left, &right| {
+						self.position(left)
+							.distance_squared(point)
+							.total_cmp(&self.position(right).distance_squared(point))
+					})
+					.expect("arc has endpoints")
+			}
 		}
 	}
 

@@ -18,5 +18,9 @@ mod topology;
 #[path = "graph_tests/arcs.rs"]
 mod arcs;
 
+#[path = "graph_tests/merging.rs"]
+mod merging;
+#[path = "graph_tests/optimization.rs"]
+mod optimization;
 #[path = "graph_tests/public_insertion.rs"]
 mod public_insertion;

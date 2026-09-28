@@ -96,8 +96,17 @@ them.
    surviving and planned walls.
 5. On success, the temporary graph gains junction nodes, old walls are
    detached, and all replacement and new pieces are linked into their node
-   rings. Only then does it replace the caller's graph. On error, the caller's
-   graph and identifier counters remain unchanged.
+   rings. Adjacent pieces of the same shape then merge through degree-two
+   nodes when one path represents them within tolerance. Only then does it
+   replace the caller's graph. On error, the caller's graph and identifier
+   counters remain unchanged.
+
+For example, adding `A -> B` and then `B -> C` on the same line leaves one
+`A -> C` wall. Bridging two collinear walls also leaves one wall. The returned
+handle covers the requested path but may now reach beyond it; handles for the
+absorbed pieces become invalid. A branch or crossing preserves its junction,
+so walls do not merge through it. Circular arcs merge only when their direction
+and curvature agree and their combined sweep remains below one revolution.
 
 The temporary copy makes endpoint creation part of the same atomic operation.
 It adds work and memory proportional to graph size for each insertion. The
@@ -109,11 +118,20 @@ planner also scans the graph; it has no spatial index at present.
 their neighbors. It deletes either endpoint only if no incident wall remains.
 It does not merge neighboring wall pieces automatically.
 
-Node IDs and half-edge IDs are never reused within a graph. A `Wall` is a
+Node IDs and half-edge IDs are not reused during normal editing. A `Wall` is a
 copyable handle to one *current* piece, not a persistent identity for an
 original drawing operation. Its cached endpoint IDs remain readable after
-removal or splitting, but geometry queries then return `None` and removal
+removal, splitting, or merging, but geometry queries then return `None` and removal
 returns `UnknownWall`. IDs and handles are local to one graph instance.
+
+`optimize()` rebuilds the graph in old-ID order, assigning contiguous node IDs
+and half-edge IDs from zero. It preserves each surviving wall's shape,
+direction, endpoints, and topology. It returns `WallGraphIdMap`, with `node(old)`
+and `wall(old)` lookups for external references. A lookup returns `None` for an
+ID or handle absent at optimization time. Callers must replace stored IDs and
+handles after optimization; old numeric values may now identify different
+objects. The operation scans and rebuilds the whole graph, so it suits a load,
+save, or explicit maintenance step rather than every edit.
 
 In debug builds, mutations check link reciprocity, endpoints, geometry,
 minimum piece length, and departure ordering. See

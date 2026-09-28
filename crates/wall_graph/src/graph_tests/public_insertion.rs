@@ -166,7 +166,7 @@ fn invalid_positions_and_sweeps_leave_the_graph_empty() {
 fn removal_cleans_up_only_nodes_left_without_walls() {
 	let mut graph = WallGraph::new();
 	let first = graph.add_wall(Vec2::ZERO, Vec2::X).unwrap()[0];
-	let second = graph.add_wall(Vec2::X, Vec2::new(2.0, 0.0)).unwrap()[0];
+	let second = graph.add_wall(Vec2::X, Vec2::new(2.0, 1.0)).unwrap()[0];
 
 	graph.remove_wall(first).unwrap();
 	assert_eq!(graph.node_position(first.origin()), None);

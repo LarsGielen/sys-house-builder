@@ -14,7 +14,8 @@ const DISTANCE_TOLERANCE: f32 = crate::geometry::DISTANCE_TOLERANCE as f32;
 
 /// Identifies a node in one [`WallGraph`].
 ///
-/// The identifier is opaque and never reused, but becomes invalid if its node is removed.
+/// The identifier is opaque and not reused during ordinary edits. [`WallGraph::optimize`]
+/// reassigns node identifiers, so callers must use its returned mapping afterwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WallNodeId(usize);
 
@@ -46,6 +47,8 @@ pub enum WallError {
 	TangentialContact,
 	/// A query parameter or sampling deviation is invalid or requests too many samples.
 	InvalidParameter,
+	/// The graph cannot allocate another node or half-edge identifier.
+	IdExhausted,
 }
 
 impl fmt::Display for WallError {
@@ -68,6 +71,7 @@ impl fmt::Display for WallError {
 				"walls with indistinguishable departure tangents are unsupported"
 			}
 			WallError::InvalidParameter => "invalid curve parameter or sampling deviation",
+			WallError::IdExhausted => "wall graph identifier space is exhausted",
 		};
 		f.write_str(message)
 	}
@@ -100,14 +104,36 @@ struct HalfEdge {
 
 /// A handle to one current wall piece in a [`WallGraph`].
 ///
-/// A handle becomes invalid when its wall is removed or split. Its endpoints remain available so
-/// callers can interpret results without borrowing the graph again.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A handle becomes invalid when its wall is removed, split, or merged. Its endpoints remain
+/// available so callers can interpret results without borrowing the graph again. Optimization
+/// reassigns wall handles; use the mapping returned by [`WallGraph::optimize`] afterwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Wall {
 	forward: HalfEdgeId,
 	backward: HalfEdgeId,
 	origin: WallNodeId,
 	destination: WallNodeId,
+}
+
+/// Old-to-new identifiers produced by [`WallGraph::optimize`].
+///
+/// Callers holding node IDs or wall handles must replace them with the values returned here.
+#[derive(Debug)]
+pub struct WallGraphIdMap {
+	nodes: HashMap<WallNodeId, WallNodeId>,
+	walls: HashMap<Wall, Wall>,
+}
+
+impl WallGraphIdMap {
+	/// Returns the compacted identifier of a node that existed before optimization.
+	pub fn node(&self, old: WallNodeId) -> Option<WallNodeId> {
+		self.nodes.get(&old).copied()
+	}
+
+	/// Returns the compacted handle of a wall that existed before optimization.
+	pub fn wall(&self, old: Wall) -> Option<Wall> {
+		self.walls.get(&old).copied()
+	}
 }
 
 impl Wall {
@@ -132,10 +158,11 @@ struct NodeRingGap {
 /// A planar graph of wall junctions joined by straight segments and circular arcs.
 ///
 /// Insertion takes positions and creates or reuses its endpoint nodes. It divides the new path
-/// and any crossed walls at their junctions. Geometric comparisons use a fixed tolerance of
-/// `0.0001` coordinate units, so resulting pieces are longer than that tolerance.
+/// and any crossed walls at their junctions. Consecutive compatible pieces merge through
+/// degree-two nodes. Geometric comparisons use a fixed tolerance of `0.0001` coordinate units,
+/// so resulting pieces are longer than that tolerance.
 /// Removing a wall also removes either endpoint if no other wall still reaches it.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WallGraph {
 	next_node_id: usize,
 	next_edge_id: usize,
@@ -151,24 +178,63 @@ impl WallGraph {
 		Self::default()
 	}
 
-	fn allocate_node_id(&mut self) -> WallNodeId {
+	/// Rebuilds the graph with contiguous node and half-edge IDs, starting at zero.
+	///
+	/// Geometry and connectivity are preserved. Use the returned mapping to update references
+	/// held outside the graph; old identifiers and wall handles must not be used afterwards.
+	/// The operation also resets the allocation counters to the compacted graph's next IDs.
+	pub fn optimize(&mut self) -> WallGraphIdMap {
+		let mut compact = Self::new();
+		let mut node_ids = HashMap::with_capacity(self.nodes.len());
+		let mut old_nodes: Vec<_> = self.nodes.keys().copied().collect();
+		old_nodes.sort();
+		for old in old_nodes {
+			let new = compact
+				.insert_node(self.node(old).position)
+				.expect("a compacted graph cannot exhaust node IDs");
+			node_ids.insert(old, new);
+		}
+
+		let mut wall_ids = HashMap::with_capacity(self.shapes.len());
+		let mut old_walls: Vec<_> = self.walls().collect();
+		old_walls.sort_by_key(|wall| wall.forward);
+		for old in old_walls {
+			let new = compact
+				.insert_wall_unchecked(
+					node_ids[&old.origin],
+					node_ids[&old.destination],
+					self.shapes[&old.forward],
+				)
+				.expect("a compacted graph cannot exhaust half-edge IDs");
+			wall_ids.insert(old, new);
+		}
+		debug_assert_eq!(compact.validate_topology(), Ok(()));
+		debug_assert_eq!(compact.validate_geometry(), Ok(()));
+		*self = compact;
+		WallGraphIdMap {
+			nodes: node_ids,
+			walls: wall_ids,
+		}
+	}
+
+	fn allocate_node_id(&mut self) -> Result<WallNodeId, WallError> {
 		let id = self.next_node_id;
 		self.next_node_id = self
 			.next_node_id
 			.checked_add(1)
-			.expect("WallNodeId space exhausted");
+			.ok_or(WallError::IdExhausted)?;
 
-		WallNodeId(id)
+		Ok(WallNodeId(id))
 	}
 
-	fn allocate_edge_id(&mut self) -> HalfEdgeId {
+	fn allocate_edge_id(&mut self) -> Result<HalfEdgeId, WallError> {
 		let id = self.next_edge_id;
 		self.next_edge_id = self
 			.next_edge_id
 			.checked_add(1)
-			.expect("HalfEdgeId space exhausted");
+			.ok_or(WallError::IdExhausted)?;
 
-		HalfEdgeId(id)
+		Ok(HalfEdgeId(id))
 	}
 
 	fn node(&self, node_id: WallNodeId) -> &WallNode {
@@ -187,9 +253,9 @@ impl WallGraph {
 		self.edges.get_mut(&edge_id).expect("unknown HalfEdgeId")
 	}
 
-	fn insert_node(&mut self, position: Vec2) -> WallNodeId {
+	fn insert_node(&mut self, position: Vec2) -> Result<WallNodeId, WallError> {
 		debug_assert!(position.is_finite());
-		let id = self.allocate_node_id();
+		let id = self.allocate_node_id()?;
 		self.nodes.insert(
 			id,
 			WallNode {
@@ -197,7 +263,7 @@ impl WallGraph {
 				outgoing_edge: None,
 			},
 		);
-		id
+		Ok(id)
 	}
 
 	fn half_edge_curve(&self, edge_id: HalfEdgeId) -> Curve {
@@ -268,8 +334,9 @@ impl WallGraph {
 	/// Adds a straight wall between two positions, creating or reusing its endpoint nodes.
 	///
 	/// An existing node within the distance tolerance is reused. Existing walls are split where
-	/// the new path crosses them or ends on their interior. The returned pieces follow the path
-	/// from `origin` to `destination`. Splitting invalidates affected old wall handles.
+	/// the new path crosses them or ends on their interior. Compatible straight pieces merge through
+	/// degree-two nodes. The returned walls cover the new path in order, but a merged wall can extend
+	/// beyond either requested endpoint. Splitting or merging invalidates affected old wall handles.
 	/// On error, neither the graph nor its identifier counters change.
 	pub fn add_wall(&mut self, origin: Vec2, destination: Vec2) -> Result<Vec<Wall>, WallError> {
 		self.add_curve_between_positions(origin, destination, CurveShape::Straight)
@@ -279,8 +346,10 @@ impl WallGraph {
 	///
 	/// `signed_sweep` is in radians: positive is counterclockwise, negative clockwise. Its magnitude
 	/// must exceed `0.000001` and be less than one revolution. Major arcs are supported;
-	/// full circles and tangential junctions are not. The returned pieces follow the arc from
-	/// `origin` to `destination`. On error, the graph and its identifier counters are unchanged.
+	/// full circles and tangential junctions are not. Compatible arcs merge through degree-two
+	/// nodes. The returned walls cover the new path in order, but a merged arc can extend beyond
+	/// either requested endpoint. Merging invalidates affected old handles. On error, the graph
+	/// and its identifier counters are unchanged.
 	pub fn add_arc(
 		&mut self,
 		origin: Vec2,
@@ -327,8 +396,8 @@ impl WallGraph {
 			edges: self.edges.clone(),
 			shapes: self.shapes.clone(),
 		};
-		let origin_id = proposed.find_or_insert_endpoint(origin);
-		let destination_id = proposed.find_or_insert_endpoint(destination);
+		let origin_id = proposed.find_or_insert_endpoint(origin)?;
+		let destination_id = proposed.find_or_insert_endpoint(destination)?;
 		if origin_id == destination_id {
 			return Err(WallError::ZeroLength);
 		}
@@ -341,13 +410,96 @@ impl WallGraph {
 		{
 			return Err(WallError::InconsistentJunction);
 		}
-		let walls = proposed.add_curve(origin_id, destination_id, shape)?;
+		let mut walls = proposed.add_curve(origin_id, destination_id, shape)?;
+		proposed.merge_added_walls(&mut walls)?;
+		debug_assert_eq!(proposed.validate_topology(), Ok(()));
+		debug_assert_eq!(proposed.validate_geometry(), Ok(()));
 		*self = proposed;
 		Ok(walls)
 	}
 
-	fn find_or_insert_endpoint(&mut self, position: Vec2) -> WallNodeId {
-		self.nodes()
+	fn merge_added_walls(&mut self, added: &mut Vec<Wall>) -> Result<(), WallError> {
+		loop {
+			let mut merge = None;
+			'search: for &wall in added.iter() {
+				for node in [wall.origin, wall.destination] {
+					if let Some((other, merged)) = self.try_merge_at(wall, node)? {
+						merge = Some((wall, other, merged));
+						break 'search;
+					}
+				}
+			}
+			let Some((wall, other, merged)) = merge else {
+				break;
+			};
+			for result in added.iter_mut() {
+				if *result == wall || *result == other {
+					*result = merged;
+				}
+			}
+			added.dedup();
+		}
+		Ok(())
+	}
+
+	fn try_merge_at(
+		&mut self,
+		wall: Wall,
+		node: WallNodeId,
+	) -> Result<Option<(Wall, Wall)>, WallError> {
+		let outgoing = self.outgoing_half_edges(node);
+		if outgoing.len() != 2 {
+			return Ok(None);
+		}
+		let own_edge = if wall.origin == node {
+			wall.forward
+		} else {
+			wall.backward
+		};
+		let Some(&other_edge) = outgoing.iter().find(|&&edge| edge != own_edge) else {
+			return Ok(None);
+		};
+		let other_twin = self.edge(other_edge).twin;
+		let other_forward = other_edge.min(other_twin);
+		let other = Wall {
+			forward: other_forward,
+			backward: other_edge.max(other_twin),
+			origin: self.edge(other_forward).origin,
+			destination: self.half_edge_destination(other_forward),
+		};
+		let (first, second, origin, destination) = if wall.origin == node {
+			(
+				self.half_edge_curve(other_twin),
+				self.half_edge_curve(wall.forward),
+				self.half_edge_destination(other_edge),
+				wall.destination,
+			)
+		} else {
+			(
+				self.half_edge_curve(wall.forward),
+				self.half_edge_curve(other_edge),
+				wall.origin,
+				self.half_edge_destination(other_edge),
+			)
+		};
+		let Some(shape) = first.merged_shape(second) else {
+			return Ok(None);
+		};
+		self.next_edge_id
+			.checked_add(2)
+			.ok_or(WallError::IdExhausted)?;
+		self.remove_wall_unchecked(wall);
+		self.remove_wall_unchecked(other);
+		self.nodes.remove(&node);
+		Ok(Some((
+			other,
+			self.insert_wall_unchecked(origin, destination, shape)?,
+		)))
+	}
+
+	fn find_or_insert_endpoint(&mut self, position: Vec2) -> Result<WallNodeId, WallError> {
+		if let Some(id) = self
+			.nodes()
 			.filter(|&(_, existing)| existing.distance(position) <= DISTANCE_TOLERANCE)
 			.min_by(|(first_id, first), (second_id, second)| {
 				first
@@ -356,7 +508,11 @@ impl WallGraph {
 					.then_with(|| first_id.cmp(second_id))
 			})
 			.map(|(id, _)| id)
-			.unwrap_or_else(|| self.insert_node(position))
+		{
+			Ok(id)
+		} else {
+			self.insert_node(position)
+		}
 	}
 
 	fn add_curve(
@@ -375,15 +531,37 @@ impl WallGraph {
 			return Err(WallError::InvalidArc);
 		}
 		let plan = self.plan_wall_insertion(origin_id, destination_id, curve)?;
+		let new_nodes = plan
+			.junctions
+			.iter()
+			.filter(|junction| junction.existing_node.is_none())
+			.count();
+		let wall_pieces =
+			plan.replacements
+				.iter()
+				.try_fold(plan.additions.len(), |count, (_, pieces)| {
+					count
+						.checked_add(pieces.len())
+						.ok_or(WallError::IdExhausted)
+				})?;
+		let new_edges = wall_pieces.checked_mul(2).ok_or(WallError::IdExhausted)?;
+		self.next_node_id
+			.checked_add(new_nodes)
+			.ok_or(WallError::IdExhausted)?;
+		self.next_edge_id
+			.checked_add(new_edges)
+			.ok_or(WallError::IdExhausted)?;
 		let junction_ids: Vec<_> = plan
 			.junctions
 			.iter()
 			.map(|junction| {
-				junction
-					.existing_node
-					.unwrap_or_else(|| self.insert_node(junction.position))
+				if let Some(id) = junction.existing_node {
+					Ok(id)
+				} else {
+					self.insert_node(junction.position)
+				}
 			})
-			.collect();
+			.collect::<Result<_, WallError>>()?;
 		let resolve = |node: PlannedNode| match node {
 			PlannedNode::Existing(id) => id,
 			PlannedNode::Junction(index) => junction_ids[index],
@@ -397,7 +575,7 @@ impl WallGraph {
 					resolve(piece.origin),
 					resolve(piece.destination),
 					piece.shape,
-				);
+				)?;
 			}
 		}
 		let walls = plan
@@ -410,7 +588,7 @@ impl WallGraph {
 					piece.shape,
 				)
 			})
-			.collect();
+			.collect::<Result<Vec<_>, WallError>>()?;
 		debug_assert_eq!(self.validate_topology(), Ok(()));
 		debug_assert_eq!(self.validate_geometry(), Ok(()));
 		Ok(walls)
@@ -463,9 +641,12 @@ impl WallGraph {
 		origin_id: WallNodeId,
 		destination_id: WallNodeId,
 		shape: CurveShape,
-	) -> Wall {
-		let forward_id = self.allocate_edge_id();
-		let backward_id = self.allocate_edge_id();
+	) -> Result<Wall, WallError> {
+		self.next_edge_id
+			.checked_add(2)
+			.ok_or(WallError::IdExhausted)?;
+		let forward_id = self.allocate_edge_id()?;
+		let backward_id = self.allocate_edge_id()?;
 
 		let curve = Curve::new(
 			self.node(origin_id).position,
@@ -509,12 +690,12 @@ impl WallGraph {
 		}
 		self.node_mut(destination_id).outgoing_edge = Some(backward_id);
 
-		Wall {
+		Ok(Wall {
 			forward: forward_id,
 			backward: backward_id,
 			origin: origin_id,
 			destination: destination_id,
-		}
+		})
 	}
 
 	/// Iterates over every current wall junction and its position, in no particular order.
@@ -560,6 +741,17 @@ impl WallGraph {
 	pub fn wall_length(&self, wall: Wall) -> Option<f64> {
 		self.validate_wall_handle(wall).ok()?;
 		Some(self.half_edge_curve(wall.forward).length())
+	}
+
+	/// Returns the closest point on a live wall to a finite position, with its path parameter.
+	pub fn wall_closest_point(&self, wall: Wall, position: Vec2) -> Option<(f32, Vec2)> {
+		self.validate_wall_handle(wall).ok()?;
+		if !position.is_finite() {
+			return None;
+		}
+		let curve = self.half_edge_curve(wall.forward);
+		let parameter = curve.closest_parameter(position.as_dvec2());
+		Some((parameter as f32, curve.position(parameter).as_vec2()))
 	}
 
 	/// Samples a wall in handle order, including both endpoints, for rendering or export.
