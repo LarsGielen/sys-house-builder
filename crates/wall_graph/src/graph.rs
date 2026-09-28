@@ -98,7 +98,7 @@ struct HalfEdge {
 	previous: HalfEdgeId,
 }
 
-/// A handle to one wall in a [`WallGraph`].
+/// A handle to one current wall piece in a [`WallGraph`].
 ///
 /// A handle becomes invalid when its wall is removed or split. Its endpoints remain available so
 /// callers can interpret results without borrowing the graph again.
@@ -131,10 +131,10 @@ struct NodeRingGap {
 
 /// A planar graph of wall junctions joined by straight segments and circular arcs.
 ///
-/// Adding a wall automatically divides it and any crossed walls at their junctions. Geometric
-/// comparisons use a fixed tolerance of `0.0001` coordinate units, so resulting wall pieces are
-/// always longer than that tolerance. Removing a wall also removes either endpoint if no other wall
-/// still reaches it.
+/// Insertion takes positions and creates or reuses its endpoint nodes. It divides the new path
+/// and any crossed walls at their junctions. Geometric comparisons use a fixed tolerance of
+/// `0.0001` coordinate units, so resulting pieces are longer than that tolerance.
+/// Removing a wall also removes either endpoint if no other wall still reaches it.
 #[derive(Debug, Default)]
 pub struct WallGraph {
 	next_node_id: usize,
@@ -267,9 +267,10 @@ impl WallGraph {
 
 	/// Adds a straight wall between two positions, creating or reusing its endpoint nodes.
 	///
-	/// The operation is atomic: on error, neither walls nor nodes change. Existing walls are
-	/// split where the new path crosses them or ends on their interior. The returned pieces follow
-	/// the path from `origin` to `destination`.
+	/// An existing node within the distance tolerance is reused. Existing walls are split where
+	/// the new path crosses them or ends on their interior. The returned pieces follow the path
+	/// from `origin` to `destination`. Splitting invalidates affected old wall handles.
+	/// On error, neither the graph nor its identifier counters change.
 	pub fn add_wall(&mut self, origin: Vec2, destination: Vec2) -> Result<Vec<Wall>, WallError> {
 		self.add_curve_between_positions(origin, destination, CurveShape::Straight)
 	}
@@ -278,7 +279,8 @@ impl WallGraph {
 	///
 	/// `signed_sweep` is in radians: positive is counterclockwise, negative clockwise. Its magnitude
 	/// must exceed `0.000001` and be less than one revolution. Major arcs are supported;
-	/// full circles and tangential junctions are not. The operation is atomic on error.
+	/// full circles and tangential junctions are not. The returned pieces follow the arc from
+	/// `origin` to `destination`. On error, the graph and its identifier counters are unchanged.
 	pub fn add_arc(
 		&mut self,
 		origin: Vec2,
@@ -416,7 +418,7 @@ impl WallGraph {
 
 	/// Removes a wall and any endpoint left with no remaining walls.
 	///
-	/// Removing a wall invalidates its handle. Nodes that were already isolated are unaffected.
+	/// Removing a wall invalidates its handle. Shared endpoint nodes remain connected.
 	pub fn remove_wall(&mut self, wall: Wall) -> Result<(), WallError> {
 		self.validate_wall_handle(wall)?;
 		self.remove_wall_unchecked(wall);
@@ -515,12 +517,12 @@ impl WallGraph {
 		}
 	}
 
-	/// Iterates over every node and its position, in no particular order.
+	/// Iterates over every current wall junction and its position, in no particular order.
 	pub fn nodes(&self) -> impl Iterator<Item = (WallNodeId, Vec2)> + '_ {
 		self.nodes.iter().map(|(&id, node)| (id, node.position))
 	}
 
-	/// Iterates over every wall exactly once, in no particular order.
+	/// Iterates over every current wall piece exactly once, in no particular order.
 	pub fn walls(&self) -> impl Iterator<Item = Wall> + '_ {
 		self.edges
 			.iter()
