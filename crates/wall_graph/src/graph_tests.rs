@@ -4,6 +4,8 @@ mod crossing;
 mod dimensions;
 #[path = "graph_tests/geometry.rs"]
 mod geometry;
+#[path = "graph_tests/openings.rs"]
+mod openings;
 #[path = "graph_tests/queries.rs"]
 mod queries;
 #[path = "graph_tests/rejection.rs"]

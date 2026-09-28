@@ -92,6 +92,9 @@ pub(super) fn assert_consistent(graph: &WallGraph) {
 	if let Err(violation) = graph.validate_geometry() {
 		panic!("graph invariant violated: {violation}");
 	}
+	if let Err(violation) = graph.validate_openings() {
+		panic!("opening invariant violated: {violation}");
+	}
 }
 
 pub(super) fn permutations(items: Vec<usize>) -> Vec<Vec<usize>> {

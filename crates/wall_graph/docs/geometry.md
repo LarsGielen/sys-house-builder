@@ -49,6 +49,20 @@ merge removes its middle node and invalidates both old wall handles.
 The pieces must also have equal thickness and height. Splitting inherits the
 original piece's dimensions.
 
+## Openings and clearances
+
+An opening's center and width are measured in metres along its wall centerline.
+Its bottom and height are measured above the wall's floor. Openings on the same
+wall may be vertically stacked; their path and vertical intervals must have at
+least 0.02 m separation in one direction. Width must exceed the graph's distance
+tolerance. Each opening must fit within its wall's path length and height.
+
+At a junction, every connected wall is treated as a constant-width swept
+centerline, with radius equal to half its thickness. An opening must remain at
+least 0.05 m beyond that footprint. The clearance check covers the complete
+opening interval on straight and curved walls. Wall insertion and dimension
+edits validate the resulting openings before committing.
+
 ## Contacts, snapping, and rejection
 
 The geometry module handles segment–segment, segment–arc, and arc–arc

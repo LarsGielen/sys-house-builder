@@ -112,6 +112,13 @@ The temporary copy makes endpoint creation part of the same atomic operation.
 It adds work and memory proportional to graph size for each insertion. The
 planner also scans the graph; it has no spatial index at present.
 
+Openings are separate domain values owned by the graph. They have stable IDs and
+refer to one current wall piece. When insertion replaces or merges pieces, the
+graph transfers their openings to the new handles and projects each center onto
+the resulting path. It validates every opening on the proposed graph before
+commit. Removal deletes openings owned by the removed wall; optimization remaps
+their wall references while retaining opening IDs.
+
 ## Removal, handles, and invariants
 
 `remove_wall` validates the handle, detaches both half-edges, and reconnects

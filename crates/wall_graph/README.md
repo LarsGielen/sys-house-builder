@@ -42,6 +42,14 @@ invalidates its handle; node identifiers stay stable through ordinary edits
 while their junctions remain connected. The public API does not create
 standalone nodes.
 
+An opening belongs to one current wall piece. `add_opening` takes an `OpeningSpec`
+with its center distance along the wall path, width, bottom elevation, and opening
+height, all in metres. `opening`, `openings`, and `opening_position` query them;
+`set_opening` and `remove_opening` edit them independently of the wall. Opening
+IDs stay stable through ordinary edits and `optimize`. A wall removal removes
+its openings. Splits and merges keep an opening's world position; an insertion
+that would cut through or crowd an opening is rejected atomically.
+
 After editing, `graph.optimize()` rebuilds the same geometry and connectivity
 with contiguous node and internal half-edge IDs. It returns a `WallGraphIdMap`
 that translates old node IDs and wall handles for objects that refer to the
