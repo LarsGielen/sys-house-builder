@@ -96,8 +96,8 @@ them.
    surviving and planned walls.
 5. On success, the temporary graph gains junction nodes, old walls are
    detached, and all replacement and new pieces are linked into their node
-   rings. Adjacent pieces of the same shape then merge through degree-two
-   nodes when one path represents them within tolerance. Only then does it
+   rings. Adjacent pieces of the same shape and dimensions then merge through
+   degree-two nodes when one path represents them within tolerance. Only then does it
    replace the caller's graph. On error, the caller's graph and identifier
    counters remain unchanged.
 
@@ -111,6 +111,13 @@ and curvature agree and their combined sweep remains below one revolution.
 The temporary copy makes endpoint creation part of the same atomic operation.
 It adds work and memory proportional to graph size for each insertion. The
 planner also scans the graph; it has no spatial index at present.
+
+Openings are separate domain values owned by the graph. They have stable IDs and
+refer to one current wall piece. When insertion replaces or merges pieces, the
+graph transfers their openings to the new handles and projects each center onto
+the resulting path. It validates every opening on the proposed graph before
+commit. Removal deletes openings owned by the removed wall; optimization remaps
+their wall references while retaining opening IDs.
 
 ## Removal, handles, and invariants
 

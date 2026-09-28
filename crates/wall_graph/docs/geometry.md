@@ -1,7 +1,7 @@
 # Geometry conventions
 
-All positions use the XY plane in arbitrary coordinate units. The graph stores
-wall centerlines and their junctions, not thickness, height, or surfaces.
+All positions use the XY plane in metres. The graph stores wall centerlines,
+their junctions, thickness, and height, but not surfaces.
 Public positions and samples use `glam::Vec2` (`f32` coordinates). Curve
 calculations use `f64` internally, but that does not restore precision already
 lost when positions were supplied as `Vec2`.
@@ -46,6 +46,22 @@ distance tolerance. Straight pieces become one segment; circular pieces must
 turn the same way and combine to a sweep below one revolution. Different curve
 types, bends, branch junctions, and full circles stay separate. A successful
 merge removes its middle node and invalidates both old wall handles.
+The pieces must also have equal thickness and height. Splitting inherits the
+original piece's dimensions.
+
+## Openings and clearances
+
+An opening's center and width are measured in metres along its wall centerline.
+Its bottom and height are measured above the wall's floor. Openings on the same
+wall may be vertically stacked; their path and vertical intervals must have at
+least 0.02 m separation in one direction. Width must exceed the graph's distance
+tolerance. Each opening must fit within its wall's path length and height.
+
+At a junction, every connected wall is treated as a constant-width swept
+centerline, with radius equal to half its thickness. An opening must remain at
+least 0.05 m beyond that footprint. The clearance check covers the complete
+opening interval on straight and curved walls. Wall insertion and dimension
+edits validate the resulting openings before committing.
 
 ## Contacts, snapping, and rejection
 
@@ -57,7 +73,7 @@ Curves that share an endpoint are still checked for another meeting elsewhere.
 
 | Rule | Current value | Effect |
 | --- | ---: | --- |
-| Distance tolerance | `0.0001` coordinate units | Groups nearby contacts, finds points on curves, reuses nearby endpoint nodes, and rejects too-short pieces. |
+| Distance tolerance | `0.0001` m | Groups nearby contacts, finds points on curves, reuses nearby endpoint nodes, and rejects too-short pieces. |
 | Departure-angle tolerance | `0.000001` radians | Rejects junctions whose outgoing paths cannot be ordered unambiguously by tangent. |
 
 When a requested endpoint lies within distance tolerance of existing nodes,
@@ -76,6 +92,7 @@ tangencies within distance tolerance are treated as tangential instead of
 creating two nearly coincident junctions.
 
 Other errors include `InvalidPosition` for non-finite endpoints,
+`InvalidDimensions` for non-finite or nonpositive wall thickness or height,
 `InvalidArc` for an invalid sweep or unrepresentable arc, and `ZeroLength`
 when requested endpoints or a resulting piece are too close. `UnknownWall`
 means a handle has been removed, split, or merged; `InvalidParameter` covers
@@ -96,6 +113,6 @@ they never become graph nodes.
 
 The graph currently rejects overlapping paths and tangential junctions. It
 does not support a single full-circle wall, self-intersecting curve types,
-or Bézier walls. It does not compute wall thickness, offset curves, or room
+or Bézier walls. It stores wall thickness but does not compute offset curves or room
 areas. See [Architecture](architecture.md) for how these geometry decisions
 feed the topology.

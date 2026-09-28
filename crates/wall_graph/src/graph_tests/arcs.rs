@@ -313,7 +313,7 @@ fn sampling_changes_no_topology_and_validates_queries() {
 	}
 	graph.remove_wall(reverse(wall)).unwrap();
 	assert_eq!(graph.sample_wall(wall, 0.1), Err(WallError::UnknownWall));
-	assert!(graph.shapes.is_empty());
+	assert!(graph.wall_data.is_empty());
 	assert_consistent(&graph);
 }
 
