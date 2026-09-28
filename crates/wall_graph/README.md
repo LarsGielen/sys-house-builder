@@ -9,9 +9,11 @@ use glam::Vec2;
 use wall_graph::WallGraph;
 
 let mut graph = WallGraph::new();
-let start = graph.add_node(Vec2::new(1.0, 0.0))?;
-let end = graph.add_node(Vec2::new(-1.0, 0.0))?;
-let pieces = graph.add_arc(start, end, std::f32::consts::PI)?;
+let pieces = graph.add_arc(
+    Vec2::new(1.0, 0.0),
+    Vec2::new(-1.0, 0.0),
+    std::f32::consts::PI,
+)?;
 let points = graph.sample_wall(pieces[0], 0.01)?;
 # Ok::<(), wall_graph::WallError>(())
 ```
@@ -22,6 +24,9 @@ let points = graph.sample_wall(pieces[0], 0.01)?;
   positive counterclockwise, negative clockwise, viewed in the XY plane.
 - Arc sweep magnitude must exceed `0.000001` and be less than one revolution.
   Major arcs are supported. A full circle can be built from two semicircles.
+- Wall insertion takes positions and creates or reuses endpoint nodes atomically.
+  Existing nodes within `0.0001` coordinate units are reused, preferring the
+  closest node and then the oldest identifier. Every stored node belongs to a wall.
 - Node positions own the endpoints; each wall stores its shape once, shared by
   its two half-edges. Different geometric paths may connect the same nodes.
 - `wall_position` and `wall_tangent` use parameters from zero at the handle's
@@ -35,13 +40,13 @@ let points = graph.sample_wall(pieces[0], 0.01)?;
 - Overlapping paths are rejected. Tangential junctions and contacts within the
   distance tolerance of circle tangency are rejected with `TangentialContact`.
   Node ordering uses departure tangents with a `0.000001` radian tolerance.
-- Distinct coincident nodes are not globally merged. Interior contacts prefer an
-  existing node deterministically; proximity to an endpoint does not merge two
-  independent endpoint identities.
+- Interior contacts prefer an existing node deterministically. Node IDs remain
+  stable while the node has an incident wall.
 
-Insertion validates the complete plan before changing nodes, walls, or identifier
-counters. Removal and splitting invalidate the original wall handle. Queries on
-stale handles return `None` or `UnknownWall`, depending on the query.
+Insertion validates a temporary graph and commits it only on success, so errors
+change neither nodes, walls, nor identifier counters. Removal and splitting
+invalidate the original wall handle. Queries on stale handles return `None` or
+`UnknownWall`, depending on the query.
 
 ## Rendering and future curves
 

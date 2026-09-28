@@ -24,7 +24,7 @@ struct HalfEdgeId(usize);
 /// An error caused by a proposed mutation of a [`WallGraph`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WallError {
-	/// A node position contains a non-finite coordinate.
+	/// A proposed endpoint position contains a non-finite coordinate.
 	InvalidPosition,
 	/// An endpoint is not a node of this graph.
 	UnknownNode,
@@ -90,7 +90,7 @@ struct WallNode {
 ///
 /// `next(e)` is the first edge leaving `e`'s destination clockwise from `twin(e)`.
 /// This keeps both face traversal and each node's clockwise ring in one linkage.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct HalfEdge {
 	origin: WallNodeId,
 	twin: HalfEdgeId,
@@ -187,18 +187,6 @@ impl WallGraph {
 		self.edges.get_mut(&edge_id).expect("unknown HalfEdgeId")
 	}
 
-	/// Adds a corner at `position`, not yet joined to any wall.
-	///
-	/// Distinct nodes may occupy the same position, but a wall cannot directly join them.
-	/// Returns [`WallError::InvalidPosition`] without changing the graph if either coordinate is not
-	/// finite.
-	pub fn add_node(&mut self, position: Vec2) -> Result<WallNodeId, WallError> {
-		if !position.is_finite() {
-			return Err(WallError::InvalidPosition);
-		}
-		Ok(self.insert_node(position))
-	}
-
 	fn insert_node(&mut self, position: Vec2) -> WallNodeId {
 		debug_assert!(position.is_finite());
 		let id = self.allocate_node_id();
@@ -277,30 +265,24 @@ impl WallGraph {
 		})
 	}
 
-	/// Adds a straight wall between two existing nodes.
+	/// Adds a straight wall between two positions, creating or reusing its endpoint nodes.
 	///
-	/// The operation is atomic: on error, the graph is unchanged. Existing walls are split where
-	/// the new wall crosses them or where an endpoint lies on their interior. The new wall is also
-	/// split at every existing node it passes through. The returned walls cover the resulting path
-	/// in order from `origin_id` to `destination_id`.
-	pub fn add_wall(
-		&mut self,
-		origin_id: WallNodeId,
-		destination_id: WallNodeId,
-	) -> Result<Vec<Wall>, WallError> {
-		self.add_curve(origin_id, destination_id, CurveShape::Straight)
+	/// The operation is atomic: on error, neither walls nor nodes change. Existing walls are
+	/// split where the new path crosses them or ends on their interior. The returned pieces follow
+	/// the path from `origin` to `destination`.
+	pub fn add_wall(&mut self, origin: Vec2, destination: Vec2) -> Result<Vec<Wall>, WallError> {
+		self.add_curve_between_positions(origin, destination, CurveShape::Straight)
 	}
 
-	/// Adds a circular arc between existing nodes, splitting all contacts just like [`Self::add_wall`].
+	/// Adds a circular arc between two positions, creating or reusing its endpoint nodes.
 	///
 	/// `signed_sweep` is in radians: positive is counterclockwise, negative clockwise. Its magnitude
-	/// must be greater than `0.000001` and less than one full revolution. Major arcs are supported;
-	/// full circles and tangential junctions are not. Distinct paths may join the same endpoints.
-	/// On error, the graph (including identifier allocation) is unchanged.
+	/// must exceed `0.000001` and be less than one revolution. Major arcs are supported;
+	/// full circles and tangential junctions are not. The operation is atomic on error.
 	pub fn add_arc(
 		&mut self,
-		origin_id: WallNodeId,
-		destination_id: WallNodeId,
+		origin: Vec2,
+		destination: Vec2,
 		signed_sweep: f32,
 	) -> Result<Vec<Wall>, WallError> {
 		if !signed_sweep.is_finite()
@@ -309,13 +291,70 @@ impl WallGraph {
 		{
 			return Err(WallError::InvalidArc);
 		}
-		self.add_curve(
-			origin_id,
-			destination_id,
+		self.add_curve_between_positions(
+			origin,
+			destination,
 			CurveShape::CircularArc {
 				sweep: signed_sweep as f64,
 			},
 		)
+	}
+
+	fn add_curve_between_positions(
+		&mut self,
+		origin: Vec2,
+		destination: Vec2,
+		shape: CurveShape,
+	) -> Result<Vec<Wall>, WallError> {
+		if !origin.is_finite() || !destination.is_finite() {
+			return Err(WallError::InvalidPosition);
+		}
+		if origin.distance(destination) <= DISTANCE_TOLERANCE {
+			return Err(WallError::ZeroLength);
+		}
+		let requested = Curve::new(origin, destination, shape);
+		if !requested.valid() {
+			return Err(WallError::InvalidArc);
+		}
+
+		// Plan against a copy so endpoint creation is part of the same transaction as wall insertion.
+		let mut proposed = Self {
+			next_node_id: self.next_node_id,
+			next_edge_id: self.next_edge_id,
+			nodes: self.nodes.clone(),
+			edges: self.edges.clone(),
+			shapes: self.shapes.clone(),
+		};
+		let origin_id = proposed.find_or_insert_endpoint(origin);
+		let destination_id = proposed.find_or_insert_endpoint(destination);
+		if origin_id == destination_id {
+			return Err(WallError::ZeroLength);
+		}
+		let actual = Curve::new(
+			proposed.node(origin_id).position,
+			proposed.node(destination_id).position,
+			shape,
+		);
+		if !actual.valid() || actual.deviation_from(requested, 0.0, 1.0) > DISTANCE_TOLERANCE as f64
+		{
+			return Err(WallError::InconsistentJunction);
+		}
+		let walls = proposed.add_curve(origin_id, destination_id, shape)?;
+		*self = proposed;
+		Ok(walls)
+	}
+
+	fn find_or_insert_endpoint(&mut self, position: Vec2) -> WallNodeId {
+		self.nodes()
+			.filter(|&(_, existing)| existing.distance(position) <= DISTANCE_TOLERANCE)
+			.min_by(|(first_id, first), (second_id, second)| {
+				first
+					.distance(position)
+					.total_cmp(&second.distance(position))
+					.then_with(|| first_id.cmp(second_id))
+			})
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| self.insert_node(position))
 	}
 
 	fn add_curve(

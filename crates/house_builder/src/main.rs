@@ -7,11 +7,11 @@ const WALL_THICKNESS: f32 = 4.0;
 fn build_demo_graph() -> WallGraph {
 	let mut graph = WallGraph::new();
 
-	let bottom_left = graph.add_node(Vec2::new(-150.0, -100.0)).unwrap();
-	let bottom_right = graph.add_node(Vec2::new(150.0, -100.0)).unwrap();
-	let top_right = graph.add_node(Vec2::new(150.0, 100.0)).unwrap();
-	let top_left = graph.add_node(Vec2::new(-150.0, 100.0)).unwrap();
-	let door = graph.add_node(Vec2::new(250.0, 0.0)).unwrap();
+	let bottom_left = Vec2::new(-150.0, -100.0);
+	let bottom_right = Vec2::new(150.0, -100.0);
+	let top_right = Vec2::new(150.0, 100.0);
+	let top_left = Vec2::new(-150.0, 100.0);
+	let door = Vec2::new(250.0, 0.0);
 
 	graph
 		.add_wall(bottom_left, bottom_right)
@@ -22,10 +22,8 @@ fn build_demo_graph() -> WallGraph {
 	graph
 		.add_arc(top_right, door, -std::f32::consts::FRAC_PI_2)
 		.expect("demo arc");
-	let crossing_bottom = graph.add_node(Vec2::new(200.0, -30.0)).unwrap();
-	let crossing_top = graph.add_node(Vec2::new(200.0, 130.0)).unwrap();
 	graph
-		.add_wall(crossing_bottom, crossing_top)
+		.add_wall(Vec2::new(200.0, -30.0), Vec2::new(200.0, 130.0))
 		.expect("demo crossing");
 
 	graph

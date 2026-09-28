@@ -65,8 +65,14 @@ fn a_removed_node_can_no_longer_be_used() {
 	graph.remove_wall(wall).unwrap();
 
 	assert_eq!(graph.node_position(b), None);
-	assert_eq!(graph.add_wall(a, b), Err(WallError::UnknownNode));
-	assert_eq!(graph.add_wall(b, c), Err(WallError::UnknownNode));
+	assert_eq!(
+		graph.add_wall_between_nodes(a, b),
+		Err(WallError::UnknownNode)
+	);
+	assert_eq!(
+		graph.add_wall_between_nodes(b, c),
+		Err(WallError::UnknownNode)
+	);
 	assert_consistent(&graph);
 }
 
@@ -81,7 +87,7 @@ fn a_crossing_node_goes_once_its_last_wall_is_removed() {
 		let (mut graph, [w, e, s, n]) =
 			graph_with_nodes([(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)]);
 		add_single_wall(&mut graph, w, e);
-		graph.add_wall(s, n).unwrap();
+		graph.add_wall_between_nodes(s, n).unwrap();
 		let x = node_at(&graph, Vec2::ZERO);
 		let arms = [w, n, e, s];
 

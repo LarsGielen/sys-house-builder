@@ -25,7 +25,7 @@ fn crossing_a_wall_makes_a_four_way_junction() {
 			}
 
 			let (from, to) = if new_reversed { (n, s) } else { (s, n) };
-			let added = graph.add_wall(from, to).unwrap();
+			let added = graph.add_wall_between_nodes(from, to).unwrap();
 
 			let context =
 				format!("existing reversed {existing_reversed}, new reversed {new_reversed}");
@@ -61,7 +61,7 @@ fn crossing_several_walls_breaks_the_new_wall_at_each_in_order() {
 		}
 
 		let (from, to) = if reversed { (b, a) } else { (a, b) };
-		let added = graph.add_wall(from, to).unwrap();
+		let added = graph.add_wall_between_nodes(from, to).unwrap();
 
 		let crossings = [1.0, 2.0, 3.0].map(|x| node_at(&graph, Vec2::new(x, 0.0)));
 		let mut path = [a, crossings[0], crossings[1], crossings[2], b];
@@ -99,7 +99,7 @@ fn a_grid_of_crossing_walls_is_the_same_in_any_order() {
 			})
 			.collect();
 		for &i in &order {
-			graph.add_wall(ends[i].0, ends[i].1).unwrap();
+			graph.add_wall_between_nodes(ends[i].0, ends[i].1).unwrap();
 		}
 
 		assert_consistent(&graph);
@@ -137,8 +137,8 @@ fn two_walls_across_a_room_divide_it_into_four() {
 	let [south, north, west, east] = [(1.0, 0.0), (1.0, 2.0), (0.0, 1.0), (2.0, 1.0)]
 		.map(|(x, y)| graph.add_node(Vec2::new(x, y)).unwrap());
 
-	graph.add_wall(south, north).unwrap();
-	graph.add_wall(west, east).unwrap();
+	graph.add_wall_between_nodes(south, north).unwrap();
+	graph.add_wall_between_nodes(west, east).unwrap();
 
 	assert_consistent(&graph);
 	let x = node_at(&graph, Vec2::new(1.0, 1.0));
@@ -183,7 +183,7 @@ fn a_wall_through_an_existing_junction_joins_it_without_a_new_node() {
 		graph_with_nodes([(-1.0, 0.0), (1.0, 0.0), (0.0, 0.0), (0.0, 1.0)]);
 	add_single_wall(&mut graph, j, n);
 
-	let added = graph.add_wall(w, e).unwrap();
+	let added = graph.add_wall_between_nodes(w, e).unwrap();
 
 	let pieces: Vec<_> = added.iter().map(|w| (w.origin, w.destination)).collect();
 	assert_eq!(pieces, vec![(w, j), (j, e)]);
@@ -208,7 +208,7 @@ fn a_wall_through_the_centre_of_a_crossing_uses_its_node() {
 		add_single_wall(&mut graph, c, arm);
 	}
 
-	let added = graph.add_wall(sw, ne).unwrap();
+	let added = graph.add_wall_between_nodes(sw, ne).unwrap();
 
 	assert_eq!(added.len(), 2);
 	assert_eq!(graph.nodes().count(), 7);
@@ -220,7 +220,7 @@ fn a_wall_through_the_centre_of_a_crossing_uses_its_node() {
 fn a_wall_through_an_isolated_node_picks_it_up() {
 	let (mut graph, [a, m, b]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]);
 
-	let added = graph.add_wall(a, b).unwrap();
+	let added = graph.add_wall_between_nodes(a, b).unwrap();
 
 	let pieces: Vec<_> = added.iter().map(|w| (w.origin, w.destination)).collect();
 	assert_eq!(pieces, vec![(a, m), (m, b)]);
@@ -236,7 +236,7 @@ fn an_isolated_node_at_a_crossing_becomes_the_junction() {
 	let south = graph.add_node(Vec2::new(0.0, -1.0)).unwrap();
 	let north = graph.add_node(Vec2::new(0.0, 1.0)).unwrap();
 
-	let added = graph.add_wall(south, north).unwrap();
+	let added = graph.add_wall_between_nodes(south, north).unwrap();
 
 	assert_eq!(graph.nodes().count(), 5);
 	assert_eq!(
@@ -267,7 +267,7 @@ fn nearby_nodes_on_a_new_wall_are_one_breakpoint() {
 		(2.0, 0.0),
 	]);
 
-	let added = graph.add_wall(start, end).unwrap();
+	let added = graph.add_wall_between_nodes(start, end).unwrap();
 
 	assert_eq!(
 		added
@@ -296,7 +296,7 @@ fn a_crossing_that_grazes_a_wall_end_joins_at_that_node() {
 		graph_with_nodes([(0.0, offset), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)]);
 	add_single_wall(&mut graph, c, d);
 
-	let added = graph.add_wall(w, e).unwrap();
+	let added = graph.add_wall_between_nodes(w, e).unwrap();
 
 	let pieces: Vec<_> = added.iter().map(|w| (w.origin, w.destination)).collect();
 	assert_eq!(pieces, vec![(w, c), (c, e)]);
@@ -310,7 +310,7 @@ fn walls_crossing_at_a_shallow_angle_still_meet_at_a_node() {
 		graph_with_nodes([(0.0, 0.0), (10.0, 0.0), (0.0, -0.1), (10.0, 0.1)]);
 	add_single_wall(&mut graph, a, b);
 
-	let added = graph.add_wall(c, d).unwrap();
+	let added = graph.add_wall_between_nodes(c, d).unwrap();
 
 	assert_eq!(added.len(), 2);
 	let x = node_at(&graph, Vec2::new(5.0, 0.0));
@@ -332,7 +332,7 @@ fn a_wall_ending_on_one_wall_and_crossing_another_splits_both() {
 	add_single_wall(&mut graph, c, d);
 	let m = graph.add_node(Vec2::new(1.0, 2.0)).unwrap();
 
-	let added = graph.add_wall(m, s).unwrap();
+	let added = graph.add_wall_between_nodes(m, s).unwrap();
 
 	let x = node_at(&graph, Vec2::new(1.0, 1.0));
 	let pieces: Vec<_> = added.iter().map(|w| (w.origin, w.destination)).collect();
@@ -371,9 +371,13 @@ fn a_wall_along_part_of_an_unconnected_wall_is_rejected_and_changes_nothing() {
 		let b = graph.add_node(Vec2::new(from.0, from.1)).unwrap();
 		let d = graph.add_node(Vec2::new(to.0, to.1)).unwrap();
 
-		assert_eq!(graph.add_wall(b, d), Err(WallError::Overlapping), "{why}");
 		assert_eq!(
-			graph.add_wall(d, b),
+			graph.add_wall_between_nodes(b, d),
+			Err(WallError::Overlapping),
+			"{why}"
+		);
+		assert_eq!(
+			graph.add_wall_between_nodes(d, b),
 			Err(WallError::Overlapping),
 			"{why}, reversed"
 		);
@@ -395,7 +399,10 @@ fn a_rejected_wall_does_not_split_the_walls_it_would_have_crossed() {
 	let a = graph.add_node(Vec2::new(0.0, 0.0)).unwrap();
 	let far = graph.add_node(Vec2::new(4.0, 0.0)).unwrap();
 
-	assert_eq!(graph.add_wall(a, far), Err(WallError::Overlapping));
+	assert_eq!(
+		graph.add_wall_between_nodes(a, far),
+		Err(WallError::Overlapping)
+	);
 
 	assert_eq!(
 		wall_node_pairs(&graph),
@@ -411,7 +418,7 @@ fn a_wall_between_nodes_at_the_same_position_is_rejected() {
 		let (mut graph, [a, b]) = graph_with_nodes([(1.0, 1.0), (1.0 + offset, 1.0)]);
 
 		assert_eq!(
-			graph.add_wall(a, b),
+			graph.add_wall_between_nodes(a, b),
 			Err(WallError::ZeroLength),
 			"offset {offset}"
 		);
@@ -431,7 +438,7 @@ fn walls_that_miss_each_other_are_left_alone() {
 		let c = graph.add_node(Vec2::new(from.0, from.1)).unwrap();
 		let d = graph.add_node(Vec2::new(to.0, to.1)).unwrap();
 
-		let added = graph.add_wall(c, d).unwrap();
+		let added = graph.add_wall_between_nodes(c, d).unwrap();
 
 		assert_eq!(added.len(), 1, "{why}");
 		assert_eq!(
@@ -450,7 +457,7 @@ fn a_removed_wall_is_no_longer_crossed() {
 	let existing = add_single_wall(&mut graph, w, e);
 	graph.remove_wall(existing).unwrap();
 
-	let added = graph.add_wall(s, n).unwrap();
+	let added = graph.add_wall_between_nodes(s, n).unwrap();
 
 	assert_eq!(added.len(), 1);
 	assert_eq!(graph.nodes().count(), 2);

@@ -1,10 +1,11 @@
 use glam::Vec2;
 
-use super::super::{HalfEdgeId, Wall, WallGraph, WallNodeId};
+use super::super::{HalfEdgeId, Wall, WallError, WallGraph, WallNodeId};
+use crate::geometry::CurveShape;
 
 /// Adds a wall that is expected not to meet any other wall, so it comes back whole.
 pub(super) fn add_single_wall(graph: &mut WallGraph, from: WallNodeId, to: WallNodeId) -> Wall {
-	let walls = graph.add_wall(from, to).unwrap();
+	let walls = graph.add_wall_between_nodes(from, to).unwrap();
 	assert_eq!(walls.len(), 1, "wall was unexpectedly split: {walls:?}");
 	walls[0]
 }
@@ -152,10 +153,50 @@ pub(super) fn add_walls(
 	for &i in order {
 		let (from, to) = walls[i];
 		let result = if flipped[i] {
-			graph.add_wall(to, from)
+			graph.add_wall_between_nodes(to, from)
 		} else {
-			graph.add_wall(from, to)
+			graph.add_wall_between_nodes(from, to)
 		};
 		result.unwrap();
+	}
+}
+
+// These helpers exercise the internal planner with pre-existing nodes, including deliberately
+// isolated nodes that callers cannot create through the public API.
+impl WallGraph {
+	pub(super) fn add_node(&mut self, position: Vec2) -> Result<WallNodeId, WallError> {
+		if !position.is_finite() {
+			return Err(WallError::InvalidPosition);
+		}
+		Ok(self.insert_node(position))
+	}
+
+	pub(super) fn add_wall_between_nodes(
+		&mut self,
+		origin: WallNodeId,
+		destination: WallNodeId,
+	) -> Result<Vec<Wall>, WallError> {
+		self.add_curve(origin, destination, CurveShape::Straight)
+	}
+
+	pub(super) fn add_arc_between_nodes(
+		&mut self,
+		origin: WallNodeId,
+		destination: WallNodeId,
+		sweep: f32,
+	) -> Result<Vec<Wall>, WallError> {
+		if !sweep.is_finite()
+			|| sweep.abs() <= super::super::DIRECTION_ANGLE_TOLERANCE
+			|| sweep.abs() >= std::f32::consts::TAU
+		{
+			return Err(WallError::InvalidArc);
+		}
+		self.add_curve(
+			origin,
+			destination,
+			CurveShape::CircularArc {
+				sweep: sweep as f64,
+			},
+		)
 	}
 }

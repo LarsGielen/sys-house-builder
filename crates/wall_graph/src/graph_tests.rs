@@ -17,3 +17,6 @@ mod topology;
 
 #[path = "graph_tests/arcs.rs"]
 mod arcs;
+
+#[path = "graph_tests/public_insertion.rs"]
+mod public_insertion;

@@ -120,7 +120,7 @@ fn a_wall_ending_on_another_wall_splits_it_there() {
 				let m = graph.add_node(Vec2::new(1.0, 0.0)).unwrap();
 
 				let (from, to) = if new_reversed { (c, m) } else { (m, c) };
-				let added = graph.add_wall(from, to).unwrap();
+				let added = graph.add_wall_between_nodes(from, to).unwrap();
 
 				let context = format!(
 					"c_y {c_y}, wall reversed {wall_reversed}, new reversed {new_reversed}"

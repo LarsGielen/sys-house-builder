@@ -30,7 +30,7 @@ fn isolated_wall_links_form_a_two_edge_loop() {
 #[test]
 fn add_wall_returns_the_edges_running_each_way() {
 	let (mut graph, [a, b, c]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]);
-	graph.add_wall(a, b).unwrap();
+	graph.add_wall_between_nodes(a, b).unwrap();
 	let wall = add_single_wall(&mut graph, c, b);
 
 	assert_eq!(graph.edge(wall.forward).origin, c);
@@ -43,8 +43,8 @@ fn add_wall_returns_the_edges_running_each_way() {
 #[test]
 fn two_walls_sharing_a_node_form_one_four_edge_loop() {
 	let (mut graph, [a, b, c]) = graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]);
-	graph.add_wall(a, b).unwrap();
-	graph.add_wall(b, c).unwrap();
+	graph.add_wall_between_nodes(a, b).unwrap();
+	graph.add_wall_between_nodes(b, c).unwrap();
 
 	assert_consistent(&graph);
 
@@ -56,9 +56,9 @@ fn two_walls_sharing_a_node_form_one_four_edge_loop() {
 fn joining_two_existing_walls_forms_one_six_edge_loop() {
 	let (mut graph, [a, b, c, d]) =
 		graph_with_nodes([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 0.0)]);
-	graph.add_wall(a, b).unwrap();
-	graph.add_wall(c, d).unwrap();
-	graph.add_wall(b, c).unwrap();
+	graph.add_wall_between_nodes(a, b).unwrap();
+	graph.add_wall_between_nodes(c, d).unwrap();
+	graph.add_wall_between_nodes(b, c).unwrap();
 
 	assert_consistent(&graph);
 
