@@ -96,8 +96,8 @@ them.
    surviving and planned walls.
 5. On success, the temporary graph gains junction nodes, old walls are
    detached, and all replacement and new pieces are linked into their node
-   rings. Adjacent pieces of the same shape then merge through degree-two
-   nodes when one path represents them within tolerance. Only then does it
+   rings. Adjacent pieces of the same shape and dimensions then merge through
+   degree-two nodes when one path represents them within tolerance. Only then does it
    replace the caller's graph. On error, the caller's graph and identifier
    counters remain unchanged.
 

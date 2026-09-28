@@ -1,6 +1,6 @@
 use glam::Vec2;
 
-use super::super::{HalfEdgeId, Wall, WallError, WallGraph, WallNodeId};
+use super::super::{HalfEdgeId, Wall, WallDimensions, WallError, WallGraph, WallNodeId};
 use crate::geometry::CurveShape;
 
 /// Adds a wall that is expected not to meet any other wall, so it comes back whole.
@@ -176,7 +176,12 @@ impl WallGraph {
 		origin: WallNodeId,
 		destination: WallNodeId,
 	) -> Result<Vec<Wall>, WallError> {
-		self.add_curve(origin, destination, CurveShape::Straight)
+		self.add_curve(
+			origin,
+			destination,
+			CurveShape::Straight,
+			WallDimensions::default(),
+		)
 	}
 
 	pub(super) fn add_arc_between_nodes(
@@ -197,6 +202,7 @@ impl WallGraph {
 			CurveShape::CircularArc {
 				sweep: sweep as f64,
 			},
+			WallDimensions::default(),
 		)
 	}
 }

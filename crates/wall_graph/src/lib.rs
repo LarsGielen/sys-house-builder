@@ -3,4 +3,4 @@
 mod geometry;
 mod graph;
 
-pub use graph::{Wall, WallError, WallGraph, WallGraphIdMap, WallNodeId};
+pub use graph::{Wall, WallDimensions, WallError, WallGraph, WallGraphIdMap, WallNodeId};

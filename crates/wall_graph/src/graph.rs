@@ -25,6 +25,8 @@ struct HalfEdgeId(usize);
 /// An error caused by a proposed mutation of a [`WallGraph`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WallError {
+	/// A wall thickness or height is not finite and positive.
+	InvalidDimensions,
 	/// A proposed endpoint position contains a non-finite coordinate.
 	InvalidPosition,
 	/// An endpoint is not a node of this graph.
@@ -54,6 +56,7 @@ pub enum WallError {
 impl fmt::Display for WallError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let message = match self {
+			WallError::InvalidDimensions => "wall thickness and height must be finite and positive",
 			WallError::InvalidPosition => "a node position must contain only finite coordinates",
 			WallError::UnknownNode => "a wall endpoint is not a node of this graph",
 			WallError::SameNode => "a wall cannot start and end at the same node",
@@ -115,6 +118,42 @@ pub struct Wall {
 	destination: WallNodeId,
 }
 
+/// The physical dimensions of a wall piece, in metres.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WallDimensions {
+	pub thickness: f32,
+	pub height: f32,
+}
+
+impl Default for WallDimensions {
+	fn default() -> Self {
+		Self {
+			thickness: 0.20,
+			height: 2.50,
+		}
+	}
+}
+
+impl WallDimensions {
+	fn validate(self) -> Result<(), WallError> {
+		if self.thickness.is_finite()
+			&& self.thickness > 0.0
+			&& self.height.is_finite()
+			&& self.height > 0.0
+		{
+			Ok(())
+		} else {
+			Err(WallError::InvalidDimensions)
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WallData {
+	shape: CurveShape,
+	dimensions: WallDimensions,
+}
+
 /// Old-to-new identifiers produced by [`WallGraph::optimize`].
 ///
 /// Callers holding node IDs or wall handles must replace them with the values returned here.
@@ -159,7 +198,7 @@ struct NodeRingGap {
 ///
 /// Insertion takes positions and creates or reuses its endpoint nodes. It divides the new path
 /// and any crossed walls at their junctions. Consecutive compatible pieces merge through
-/// degree-two nodes. Geometric comparisons use a fixed tolerance of `0.0001` coordinate units,
+/// degree-two nodes. Geometric comparisons use a fixed tolerance of `0.0001` metres,
 /// so resulting pieces are longer than that tolerance.
 /// Removing a wall also removes either endpoint if no other wall still reaches it.
 #[derive(Debug, Default, Clone)]
@@ -168,8 +207,8 @@ pub struct WallGraph {
 	next_edge_id: usize,
 	nodes: HashMap<WallNodeId, WallNode>,
 	edges: HashMap<HalfEdgeId, HalfEdge>,
-	// The smaller half-edge ID owns the shape in its forward direction.
-	shapes: HashMap<HalfEdgeId, CurveShape>,
+	// The smaller half-edge ID owns the shape in its forward direction and the dimensions.
+	wall_data: HashMap<HalfEdgeId, WallData>,
 }
 
 impl WallGraph {
@@ -195,15 +234,17 @@ impl WallGraph {
 			node_ids.insert(old, new);
 		}
 
-		let mut wall_ids = HashMap::with_capacity(self.shapes.len());
+		let mut wall_ids = HashMap::with_capacity(self.wall_data.len());
 		let mut old_walls: Vec<_> = self.walls().collect();
 		old_walls.sort_by_key(|wall| wall.forward);
 		for old in old_walls {
+			let data = self.wall_data[&old.forward];
 			let new = compact
 				.insert_wall_unchecked(
 					node_ids[&old.origin],
 					node_ids[&old.destination],
-					self.shapes[&old.forward],
+					data.shape,
+					data.dimensions,
 				)
 				.expect("a compacted graph cannot exhaust half-edge IDs");
 			wall_ids.insert(old, new);
@@ -268,7 +309,7 @@ impl WallGraph {
 
 	fn half_edge_curve(&self, edge_id: HalfEdgeId) -> Curve {
 		let twin = self.edge(edge_id).twin;
-		let shape = self.shapes[&edge_id.min(twin)];
+		let shape = self.wall_data[&edge_id.min(twin)].shape;
 		Curve::new(
 			self.node(self.edge(edge_id).origin).position,
 			self.node(self.half_edge_destination(edge_id)).position,
@@ -339,7 +380,17 @@ impl WallGraph {
 	/// beyond either requested endpoint. Splitting or merging invalidates affected old wall handles.
 	/// On error, neither the graph nor its identifier counters change.
 	pub fn add_wall(&mut self, origin: Vec2, destination: Vec2) -> Result<Vec<Wall>, WallError> {
-		self.add_curve_between_positions(origin, destination, CurveShape::Straight)
+		self.add_wall_with_dimensions(origin, destination, WallDimensions::default())
+	}
+
+	/// Adds a straight wall with explicit dimensions in metres.
+	pub fn add_wall_with_dimensions(
+		&mut self,
+		origin: Vec2,
+		destination: Vec2,
+		dimensions: WallDimensions,
+	) -> Result<Vec<Wall>, WallError> {
+		self.add_curve_between_positions(origin, destination, CurveShape::Straight, dimensions)
 	}
 
 	/// Adds a circular arc between two positions, creating or reusing its endpoint nodes.
@@ -356,6 +407,17 @@ impl WallGraph {
 		destination: Vec2,
 		signed_sweep: f32,
 	) -> Result<Vec<Wall>, WallError> {
+		self.add_arc_with_dimensions(origin, destination, signed_sweep, WallDimensions::default())
+	}
+
+	/// Adds a circular arc with explicit dimensions in metres.
+	pub fn add_arc_with_dimensions(
+		&mut self,
+		origin: Vec2,
+		destination: Vec2,
+		signed_sweep: f32,
+		dimensions: WallDimensions,
+	) -> Result<Vec<Wall>, WallError> {
 		if !signed_sweep.is_finite()
 			|| signed_sweep.abs() <= DIRECTION_ANGLE_TOLERANCE
 			|| signed_sweep.abs() >= TAU
@@ -368,6 +430,7 @@ impl WallGraph {
 			CurveShape::CircularArc {
 				sweep: signed_sweep as f64,
 			},
+			dimensions,
 		)
 	}
 
@@ -376,7 +439,9 @@ impl WallGraph {
 		origin: Vec2,
 		destination: Vec2,
 		shape: CurveShape,
+		dimensions: WallDimensions,
 	) -> Result<Vec<Wall>, WallError> {
+		dimensions.validate()?;
 		if !origin.is_finite() || !destination.is_finite() {
 			return Err(WallError::InvalidPosition);
 		}
@@ -394,7 +459,7 @@ impl WallGraph {
 			next_edge_id: self.next_edge_id,
 			nodes: self.nodes.clone(),
 			edges: self.edges.clone(),
-			shapes: self.shapes.clone(),
+			wall_data: self.wall_data.clone(),
 		};
 		let origin_id = proposed.find_or_insert_endpoint(origin)?;
 		let destination_id = proposed.find_or_insert_endpoint(destination)?;
@@ -410,7 +475,7 @@ impl WallGraph {
 		{
 			return Err(WallError::InconsistentJunction);
 		}
-		let mut walls = proposed.add_curve(origin_id, destination_id, shape)?;
+		let mut walls = proposed.add_curve(origin_id, destination_id, shape, dimensions)?;
 		proposed.merge_added_walls(&mut walls)?;
 		debug_assert_eq!(proposed.validate_topology(), Ok(()));
 		debug_assert_eq!(proposed.validate_geometry(), Ok(()));
@@ -467,6 +532,10 @@ impl WallGraph {
 			origin: self.edge(other_forward).origin,
 			destination: self.half_edge_destination(other_forward),
 		};
+		let dimensions = self.wall_data[&wall.forward].dimensions;
+		if dimensions != self.wall_data[&other.forward].dimensions {
+			return Ok(None);
+		}
 		let (first, second, origin, destination) = if wall.origin == node {
 			(
 				self.half_edge_curve(other_twin),
@@ -493,7 +562,7 @@ impl WallGraph {
 		self.nodes.remove(&node);
 		Ok(Some((
 			other,
-			self.insert_wall_unchecked(origin, destination, shape)?,
+			self.insert_wall_unchecked(origin, destination, shape, dimensions)?,
 		)))
 	}
 
@@ -520,6 +589,7 @@ impl WallGraph {
 		origin_id: WallNodeId,
 		destination_id: WallNodeId,
 		shape: CurveShape,
+		dimensions: WallDimensions,
 	) -> Result<Vec<Wall>, WallError> {
 		self.validate_wall_endpoints(origin_id, destination_id)?;
 		let curve = Curve::new(
@@ -566,15 +636,21 @@ impl WallGraph {
 			PlannedNode::Existing(id) => id,
 			PlannedNode::Junction(index) => junction_ids[index],
 		};
+		let replacement_dimensions: Vec<_> = plan
+			.replacements
+			.iter()
+			.map(|(wall, _)| self.wall_data[&wall.forward].dimensions)
+			.collect();
 		for (wall, _) in &plan.replacements {
 			self.remove_wall_unchecked(*wall);
 		}
-		for (_, pieces) in plan.replacements {
+		for ((_, pieces), dimensions) in plan.replacements.into_iter().zip(replacement_dimensions) {
 			for piece in pieces {
 				self.insert_wall_unchecked(
 					resolve(piece.origin),
 					resolve(piece.destination),
 					piece.shape,
+					dimensions,
 				)?;
 			}
 		}
@@ -586,6 +662,7 @@ impl WallGraph {
 					resolve(piece.origin),
 					resolve(piece.destination),
 					piece.shape,
+					dimensions,
 				)
 			})
 			.collect::<Result<Vec<_>, WallError>>()?;
@@ -617,7 +694,7 @@ impl WallGraph {
 		self.detach_wall_end_from_node_ring(wall.backward, wall.forward);
 		self.edges.remove(&wall.forward);
 		self.edges.remove(&wall.backward);
-		self.shapes.remove(&wall.forward.min(wall.backward));
+		self.wall_data.remove(&wall.forward.min(wall.backward));
 	}
 
 	fn detach_wall_end_from_node_ring(&mut self, leaving: HalfEdgeId, arriving: HalfEdgeId) {
@@ -641,6 +718,7 @@ impl WallGraph {
 		origin_id: WallNodeId,
 		destination_id: WallNodeId,
 		shape: CurveShape,
+		dimensions: WallDimensions,
 	) -> Result<Wall, WallError> {
 		self.next_edge_id
 			.checked_add(2)
@@ -658,7 +736,8 @@ impl WallGraph {
 		let destination_gap =
 			self.find_node_ring_gap(destination_id, (-curve.tangent(1.0)).as_vec2().to_angle());
 
-		self.shapes.insert(forward_id, shape);
+		self.wall_data
+			.insert(forward_id, WallData { shape, dimensions });
 		self.edges.insert(
 			forward_id,
 			HalfEdge {
@@ -714,6 +793,29 @@ impl WallGraph {
 				origin: edge.origin,
 				destination: self.half_edge_destination(id),
 			})
+	}
+
+	/// Returns the dimensions of a live wall, or `None` for a stale handle.
+	pub fn wall_dimensions(&self, wall: Wall) -> Option<WallDimensions> {
+		self.validate_wall_handle(wall).ok()?;
+		self.wall_data
+			.get(&wall.forward)
+			.map(|data| data.dimensions)
+	}
+
+	/// Changes one live wall piece's dimensions without changing its topology.
+	pub fn set_wall_dimensions(
+		&mut self,
+		wall: Wall,
+		dimensions: WallDimensions,
+	) -> Result<(), WallError> {
+		self.validate_wall_handle(wall)?;
+		dimensions.validate()?;
+		self.wall_data
+			.get_mut(&wall.forward)
+			.expect("validated wall has data")
+			.dimensions = dimensions;
+		Ok(())
 	}
 
 	/// Evaluates a live wall at a normalized parameter in `[0, 1]`, in the handle's direction.
@@ -1149,12 +1251,16 @@ impl WallGraph {
 				return Err(format!("{node_id:?} has a non-finite position"));
 			}
 		}
-		if self.shapes.len() * 2 != self.edges.len() {
-			return Err("wall geometry count does not match half-edge count".into());
+		if self.wall_data.len() * 2 != self.edges.len() {
+			return Err("wall data count does not match half-edge count".into());
 		}
 		for wall in self.walls() {
-			if !self.shapes.contains_key(&wall.forward) {
-				return Err(format!("{wall:?} has no geometry"));
+			if !self
+				.wall_data
+				.get(&wall.forward)
+				.is_some_and(|data| data.dimensions.validate().is_ok())
+			{
+				return Err(format!("{wall:?} has invalid or missing data"));
 			}
 			let curve = self.half_edge_curve(wall.forward);
 			if !curve.valid() || curve.length() <= DISTANCE_TOLERANCE as f64 {

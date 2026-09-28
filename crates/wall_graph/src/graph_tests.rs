@@ -1,5 +1,7 @@
 #[path = "graph_tests/crossing.rs"]
 mod crossing;
+#[path = "graph_tests/dimensions.rs"]
+mod dimensions;
 #[path = "graph_tests/geometry.rs"]
 mod geometry;
 #[path = "graph_tests/queries.rs"]

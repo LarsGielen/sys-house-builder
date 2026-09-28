@@ -3,7 +3,7 @@
 `wall_graph` is an engine-independent, two-dimensional graph of straight and
 circular wall paths. Adding a path creates or reuses wall junctions and splits
 both the new path and any walls it crosses. The graph stores connectivity and
-centerlines; wall thickness, height, and rendering belong to its consumers.
+centerlines and wall dimensions; rendering belongs to its consumers.
 
 ```rust
 use glam::Vec2;
@@ -32,8 +32,11 @@ assert_eq!(graph.node_position(ids.node(saved_node).unwrap()), Some(Vec2::new(-2
 
 `add_wall` and `add_arc` take endpoint positions and return the current walls
 covering the new path in path order. Compatible straight pieces and circular arcs
-merge through junctions with exactly two incident walls. A returned wall may
-therefore extend beyond the requested path. A failed insertion leaves nodes,
+merge through junctions with exactly two incident walls when their thickness and
+height match. Default dimensions are 0.20 m thick and 2.50 m high.
+`add_wall_with_dimensions` and `add_arc_with_dimensions` accept explicit dimensions;
+`wall_dimensions` and `set_wall_dimensions` query and edit a live piece.
+A returned wall may therefore extend beyond the requested path. A failed insertion leaves nodes,
 walls, and identifiers unchanged. Removing, splitting, or merging a wall
 invalidates its handle; node identifiers stay stable through ordinary edits
 while their junctions remain connected. The public API does not create
