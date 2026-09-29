@@ -36,6 +36,9 @@ merge through junctions with exactly two incident walls when their thickness and
 height match. Default dimensions are 0.20 m thick and 2.50 m high.
 `add_wall_with_dimensions` and `add_arc_with_dimensions` accept explicit dimensions;
 `wall_dimensions` and `set_wall_dimensions` query and edit a live piece.
+For consumers that build surfaces, `node_walls` lists a junction's walls in
+counterclockwise departure order and `wall_curve` returns a piece's exact line or
+circle in double precision.
 A returned wall may therefore extend beyond the requested path. A failed insertion leaves nodes,
 walls, and identifiers unchanged. Removing, splitting, or merging a wall
 invalidates its handle; node identifiers stay stable through ordinary edits

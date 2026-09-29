@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::f32::consts::TAU;
 use std::fmt;
 
-use glam::Vec2;
+use glam::{DVec2, Vec2};
 
 use crate::geometry::{Curve, CurveShape, intersections};
 use crate::opening::{CORNER_CLEARANCE, MIN_OPENING_GAP, Opening, OpeningId, OpeningSpec};
@@ -222,6 +222,23 @@ impl WallDimensions {
 	}
 }
 
+/// The exact path of a wall piece in its handle's direction, for consumers that offset or
+/// intersect wall geometry instead of sampling it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WallCurve {
+	Straight {
+		start: DVec2,
+		end: DVec2,
+	},
+	/// Angles are in radians; positive sweep is counterclockwise.
+	CircularArc {
+		center: DVec2,
+		radius: f64,
+		start_angle: f64,
+		sweep: f64,
+	},
+}
+
 #[derive(Debug, Clone, Copy)]
 struct WallData {
 	shape: CurveShape,
@@ -417,6 +434,17 @@ impl WallGraph {
 
 	fn next_outgoing_half_edge_clockwise(&self, edge_id: HalfEdgeId) -> HalfEdgeId {
 		self.edge(self.edge(edge_id).twin).next
+	}
+
+	fn wall_of_half_edge(&self, edge_id: HalfEdgeId) -> Wall {
+		let twin = self.edge(edge_id).twin;
+		let forward = edge_id.min(twin);
+		Wall {
+			forward,
+			backward: edge_id.max(twin),
+			origin: self.edge(forward).origin,
+			destination: self.half_edge_destination(forward),
+		}
 	}
 
 	fn outgoing_half_edges(&self, node_id: WallNodeId) -> Vec<HalfEdgeId> {
@@ -618,13 +646,7 @@ impl WallGraph {
 			return Ok(None);
 		};
 		let other_twin = self.edge(other_edge).twin;
-		let other_forward = other_edge.min(other_twin);
-		let other = Wall {
-			forward: other_forward,
-			backward: other_edge.max(other_twin),
-			origin: self.edge(other_forward).origin,
-			destination: self.half_edge_destination(other_forward),
-		};
+		let other = self.wall_of_half_edge(other_edge);
 		let dimensions = self.wall_data[&wall.forward].dimensions;
 		if dimensions != self.wall_data[&other.forward].dimensions {
 			return Ok(None);
@@ -1202,6 +1224,50 @@ impl WallGraph {
 	pub fn node_position(&self, node_id: WallNodeId) -> Option<Vec2> {
 		self.nodes.get(&node_id).map(|node| node.position)
 	}
+
+	/// Returns the walls meeting at a node in counterclockwise order of their departure tangents,
+	/// starting from the smallest departure angle in `(-PI, PI]`. Returns `None` for an unknown node.
+	///
+	/// Handles keep their own direction; a wall leaves the node where `wall.origin() == node`.
+	pub fn node_walls(&self, node_id: WallNodeId) -> Option<Vec<Wall>> {
+		self.nodes.get(&node_id)?;
+		// The ring is linked clockwise; reversing it gives counterclockwise order.
+		let mut departures: Vec<_> = self.outgoing_half_edges(node_id);
+		departures.reverse();
+		let angle = |edge_id: HalfEdgeId| self.half_edge_curve(edge_id).tangent(0.0).to_angle();
+		if let Some(first) = (0..departures.len())
+			.min_by(|&a, &b| angle(departures[a]).total_cmp(&angle(departures[b])))
+		{
+			departures.rotate_left(first);
+		}
+		Some(
+			departures
+				.into_iter()
+				.map(|edge_id| self.wall_of_half_edge(edge_id))
+				.collect(),
+		)
+	}
+
+	/// Returns the exact path of a live wall in its handle's direction, or `None` for a stale handle.
+	pub fn wall_curve(&self, wall: Wall) -> Option<WallCurve> {
+		self.validate_wall_handle(wall).ok()?;
+		let curve = self.half_edge_curve(wall.forward);
+		Some(match curve.shape {
+			CurveShape::Straight => WallCurve::Straight {
+				start: curve.start,
+				end: curve.end,
+			},
+			CurveShape::CircularArc { sweep } => {
+				let (center, radius) = curve.circle().expect("valid arc");
+				WallCurve::CircularArc {
+					center,
+					radius,
+					start_angle: (curve.start - center).to_angle(),
+					sweep,
+				}
+			}
+		})
+	}
 }
 
 /// Nodes are allocated only after the complete insertion plan has passed validation.
@@ -1631,5 +1697,5 @@ impl WallGraph {
 }
 
 #[cfg(test)]
-#[path = "graph_tests.rs"]
+#[path = "tests.rs"]
 mod tests;

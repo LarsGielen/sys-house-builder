@@ -2944,6 +2944,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "wall_graph",
+ "wall_mesh",
 ]
 
 [[package]]
@@ -5205,6 +5206,14 @@ name = "wall_graph"
 version = "0.1.0"
 dependencies = [
  "glam",
+]
+
+[[package]]
+name = "wall_mesh"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "wall_graph",
 ]
 
 [[package]]

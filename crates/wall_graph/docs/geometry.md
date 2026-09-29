@@ -111,6 +111,13 @@ before conversion back to `Vec2`. Requests needing more than 65,536 segments
 return `InvalidParameter`. Sampled points belong to a renderer or exporter;
 they never become graph nodes.
 
+Consumers that offset or intersect wall geometry should not infer it from
+samples. `wall_curve(wall)` returns the exact path in the handle's direction:
+a `Straight` segment, or a `CircularArc` with its center, radius, start angle,
+and signed sweep in `f64`. `node_walls(node)` lists incident walls in
+counterclockwise order of their departure tangents, starting at the smallest
+angle in `(-PI, PI]`.
+
 The graph currently rejects overlapping paths and tangential junctions. It
 does not support a single full-circle wall, self-intersecting curve types,
 or Bézier walls. It stores wall thickness but does not compute offset curves or room

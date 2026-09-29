@@ -150,7 +150,7 @@ impl Curve {
 		}
 	}
 
-	fn circle(self) -> Option<(DVec2, f64)> {
+	pub(crate) fn circle(self) -> Option<(DVec2, f64)> {
 		let CurveShape::CircularArc { sweep } = self.shape else {
 			return None;
 		};
@@ -442,5 +442,5 @@ fn line_circle_points(
 }
 
 #[cfg(test)]
-#[path = "geometry_tests.rs"]
+#[path = "tests/curve.rs"]
 mod tests;
