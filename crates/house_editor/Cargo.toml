@@ -1,0 +1,9 @@
+[package]
+name = "house_editor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.19.1", features = ["dynamic_linking"] }
+wall_graph = { path = "../wall_graph" }
+wall_mesh = { path = "../wall_mesh" }
