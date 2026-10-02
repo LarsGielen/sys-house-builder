@@ -9,6 +9,17 @@ use bevy::{
 use wall_graph::WallGraph;
 
 fn main() {
+	// Reset runs first so this frame's orbit/pan/zoom input applies on top of the reset view.
+	let camera_system = (
+		request_camera_reset_from_keyboard,
+		handle_reset_camera,
+		apply_editor_camera_input_orbit,
+		apply_editor_camera_input_pan,
+		apply_editor_camera_input_keyboard_pan,
+		apply_editor_camera_input_zoom,
+		apply_editor_camera,
+	);
+
 	App::new()
 		.add_plugins(
 			DefaultPlugins
@@ -27,19 +38,10 @@ fn main() {
 				}),
 		)
 		.init_resource::<House>()
+		.add_message::<ResetCamera>()
 		.add_systems(Startup, setup_scene)
 		.add_systems(Startup, temp_probe)
-		.add_systems(
-			Update,
-			(
-				apply_editor_camera_input_orbit,
-				apply_editor_camera_input_pan,
-				apply_editor_camera_input_keyboard_pan,
-				apply_editor_camera_input_zoom,
-				apply_editor_camera,
-			)
-				.chain(),
-		)
+		.add_systems(Update, camera_system.chain())
 		.run();
 }
 
@@ -84,6 +86,60 @@ impl Default for EditorCamera {
 			distance_from_focus: 10.0,
 		}
 	}
+}
+
+const CAMERA_DISTANCE_MIN: f32 = 0.5;
+const CAMERA_DISTANCE_MAX: f32 = 100.0;
+const RESET_VIEW_RADIUS: f32 = 5.0;
+
+fn clamp_camera_distance(distance: f32) -> f32 {
+	distance.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX)
+}
+
+impl EditorCamera {
+	/// Looks at `center` from far enough away that a sphere of `radius` fits in view.
+	/// Keeps the current viewing angle.
+	fn frame(&mut self, center: Vec3, radius: f32, vertical_fov: f32) {
+		self.target_point = center;
+		// A window wider than tall is limited by the vertical FOV, so fitting that one fits both.
+		self.distance_from_focus = clamp_camera_distance(radius / (vertical_fov / 2.0).sin());
+	}
+
+	/// Returns to the default viewing angle, framing the origin.
+	fn reset(&mut self, vertical_fov: f32) {
+		let defaults = Self::default();
+		self.azimuth = defaults.azimuth;
+		self.elevation = defaults.elevation;
+		self.frame(Vec3::ZERO, RESET_VIEW_RADIUS, vertical_fov);
+	}
+}
+
+#[derive(Message)]
+struct ResetCamera;
+
+fn request_camera_reset_from_keyboard(
+	keyboard: Res<ButtonInput<KeyCode>>,
+	mut requests: MessageWriter<ResetCamera>,
+) {
+	if keyboard.just_pressed(KeyCode::Home) {
+		requests.write(ResetCamera);
+	}
+}
+
+fn handle_reset_camera(
+	mut requests: MessageReader<ResetCamera>,
+	camera: Single<(&mut EditorCamera, &Projection)>,
+) {
+	if requests.read().count() == 0 {
+		return;
+	}
+
+	let (mut editor_camera, projection) = camera.into_inner();
+	let Projection::Perspective(perspective) = projection else {
+		warn!("Cannot reset the editor camera: projection is not perspective");
+		return;
+	};
+	editor_camera.reset(perspective.fov);
 }
 
 fn apply_editor_camera(camera: Single<(&mut Transform, &EditorCamera)>) {
@@ -164,19 +220,13 @@ fn apply_editor_camera_input_keyboard_pan(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	time: Res<Time>,
 ) {
-	let mut direction = Vec2::ZERO;
-	if keyboard.pressed(KeyCode::KeyW) {
-		direction.y += 1.0;
-	}
-	if keyboard.pressed(KeyCode::KeyS) {
-		direction.y -= 1.0;
-	}
-	if keyboard.pressed(KeyCode::KeyD) {
-		direction.x += 1.0;
-	}
-	if keyboard.pressed(KeyCode::KeyA) {
-		direction.x -= 1.0;
-	}
+	let axis = |positive: KeyCode, negative: KeyCode| {
+		f32::from(keyboard.pressed(positive)) - f32::from(keyboard.pressed(negative))
+	};
+	let direction = Vec2::new(
+		axis(KeyCode::KeyD, KeyCode::KeyA),
+		axis(KeyCode::KeyW, KeyCode::KeyS),
+	);
 
 	// Normalised so diagonal movement is not faster, and zero when opposing keys cancel out.
 	let direction = direction.normalize_or_zero();
@@ -191,8 +241,6 @@ fn apply_editor_camera_input_keyboard_pan(
 	camera.target_point += yaw * Vec3::new(direction.x, 0.0, -direction.y) * distance;
 }
 
-const CAMERA_DISTANCE_MIN: f32 = 0.5;
-const CAMERA_DISTANCE_MAX: f32 = 100.0;
 const ZOOM_FACTOR_PER_LINE: f32 = 1.1;
 const SCROLL_PIXELS_PER_LINE: f32 = 40.0;
 
@@ -204,14 +252,15 @@ fn apply_editor_camera_input_zoom(
 		MouseScrollUnit::Line => mouse_scroll.delta.y,
 		MouseScrollUnit::Pixel => mouse_scroll.delta.y / SCROLL_PIXELS_PER_LINE,
 	};
+
 	if scroll_lines == 0.0 {
 		return;
 	}
 
 	// Scrolling up (positive) zooms in, so the exponent is negated.
-	camera.distance_from_focus = (camera.distance_from_focus
-		* ZOOM_FACTOR_PER_LINE.powf(-scroll_lines))
-	.clamp(CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+	camera.distance_from_focus = clamp_camera_distance(
+		camera.distance_from_focus * ZOOM_FACTOR_PER_LINE.powf(-scroll_lines),
+	);
 }
 
 // Wrapper for the Wallgraph system, needed since wall_graph is seperate from Bevy
