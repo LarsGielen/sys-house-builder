@@ -7,8 +7,12 @@ Build the editor as a fresh Bevy app with an empty house. The existing
 `house_builder` demo is a mesh inspector, not an editor starting point; leave
 it intact and do not copy its app structure. Reuse the engine-independent
 `wall_graph` and `wall_mesh` crates as their capabilities are needed.
-Use the separate guides for [step 0](editor-step-0.md) and
-[step 1](editor-step-1.md) when starting the editor.
+Use the separate guides for [step 0](editor-step-0.md),
+[step 1](editor-step-1.md), [step 2](editor-step-2.md),
+[step 3](editor-step-3.md), [step 4](editor-step-4.md),
+[step 5](editor-step-5.md), [step 6](editor-step-6.md),
+[step 7](editor-step-7.md), [step 8](editor-step-8.md), and
+[step 9](editor-step-9.md) while building the editor.
 
 ## System boundaries
 
