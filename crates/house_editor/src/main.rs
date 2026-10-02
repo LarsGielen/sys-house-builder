@@ -2,6 +2,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::{
 	input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
+	input_focus::InputFocus,
 	log::{DEFAULT_FILTER, LogPlugin},
 	prelude::*,
 	ui::FocusPolicy,
@@ -14,11 +15,11 @@ fn main() {
 	// `update_camera_gesture` always runs so an unfocused window cancels a drag in progress.
 	let camera_system = (
 		update_camera_gesture,
-		request_camera_reset_from_keyboard.run_if(window_focused),
+		request_camera_reset_from_keyboard.run_if(viewport_keyboard_input_allowed),
 		handle_reset_camera,
 		apply_editor_camera_input_orbit,
 		apply_editor_camera_input_pan,
-		apply_editor_camera_input_keyboard_pan.run_if(window_focused),
+		apply_editor_camera_input_keyboard_pan.run_if(viewport_keyboard_input_allowed),
 		apply_editor_camera_input_zoom.run_if(window_focused.and_then(not(pointer_over_ui))),
 		apply_editor_camera,
 	);
@@ -44,7 +45,6 @@ fn main() {
 		.init_resource::<CameraGesture>()
 		.add_message::<ResetCamera>()
 		.add_systems(Startup, (setup_scene, setup_editor_panel))
-		.add_systems(Startup, temp_probe)
 		.add_systems(Update, camera_system.chain())
 		.run();
 }
@@ -72,15 +72,10 @@ fn setup_scene(
 	commands.spawn((Camera3d::default(), EditorCamera::default()));
 }
 
-/// Marks the editor's UI side panel, so input code can tell when the pointer is over it.
-#[derive(Component)]
-struct EditorPanel;
-
 fn setup_editor_panel(mut commands: Commands) {
 	commands
 		.spawn((
 			Name::new("editor-panel"),
-			EditorPanel,
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),
@@ -138,18 +133,20 @@ fn clamp_camera_distance(distance: f32) -> f32 {
 impl EditorCamera {
 	/// Looks at `center` from far enough away that a sphere of `radius` fits in view.
 	/// Keeps the current viewing angle.
-	fn frame(&mut self, center: Vec3, radius: f32, vertical_fov: f32) {
+	fn frame(&mut self, center: Vec3, radius: f32, vertical_fov: f32, aspect_ratio: f32) {
 		self.target_point = center;
-		// A window wider than tall is limited by the vertical FOV, so fitting that one fits both.
-		self.distance_from_focus = clamp_camera_distance(radius / (vertical_fov / 2.0).sin());
+		let vertical_half_fov = vertical_fov / 2.0;
+		let horizontal_half_fov = (vertical_half_fov.tan() * aspect_ratio).atan();
+		let limiting_half_fov = vertical_half_fov.min(horizontal_half_fov);
+		self.distance_from_focus = clamp_camera_distance(radius / limiting_half_fov.sin());
 	}
 
 	/// Returns to the default viewing angle, framing the origin.
-	fn reset(&mut self, vertical_fov: f32) {
+	fn reset(&mut self, vertical_fov: f32, aspect_ratio: f32) {
 		let defaults = Self::default();
 		self.azimuth = defaults.azimuth;
 		self.elevation = defaults.elevation;
-		self.frame(Vec3::ZERO, RESET_VIEW_RADIUS, vertical_fov);
+		self.frame(Vec3::ZERO, RESET_VIEW_RADIUS, vertical_fov, aspect_ratio);
 	}
 }
 
@@ -178,7 +175,7 @@ fn handle_reset_camera(
 		warn!("Cannot reset the editor camera: projection is not perspective");
 		return;
 	};
-	editor_camera.reset(perspective.fov);
+	editor_camera.reset(perspective.fov, perspective.aspect_ratio);
 }
 
 fn apply_editor_camera(camera: Single<(&mut Transform, &EditorCamera)>) {
@@ -204,6 +201,17 @@ fn window_focused(window: Single<&Window, With<PrimaryWindow>>) -> bool {
 
 fn pointer_over_ui(interactions: Query<&Interaction>) -> bool {
 	is_ui_interacted(&interactions)
+}
+
+fn viewport_keyboard_input_allowed(
+	window: Single<(Entity, &Window), With<PrimaryWindow>>,
+	interactions: Query<&Interaction>,
+	input_focus: Option<Res<InputFocus>>,
+) -> bool {
+	let (window_entity, window) = *window;
+	window.focused
+		&& !is_ui_interacted(&interactions)
+		&& input_focus.is_none_or(|focus| focus.get().is_none_or(|entity| entity == window_entity))
 }
 
 fn is_ui_interacted(interactions: &Query<&Interaction>) -> bool {
@@ -275,38 +283,23 @@ fn apply_editor_camera_input_orbit(
 		.clamp(CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
 }
 
-fn cursor_ground_point(
-	window: &Window,
-	camera: &Camera,
-	camera_transform: &GlobalTransform,
-) -> Option<Vec3> {
-	let cursor_position = window.cursor_position()?;
-	let ray = camera
-		.viewport_to_world(camera_transform, cursor_position)
-		.ok()?;
-	ray.plane_intersection_point(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))
-}
+const PAN_FOCUS_DISTANCES_PER_PIXEL: f32 = 0.0015;
 
 fn apply_editor_camera_input_pan(
-	camera: Single<(&mut EditorCamera, &Camera, &GlobalTransform)>,
-	window: Single<&Window, With<PrimaryWindow>>,
+	mut camera: Single<&mut EditorCamera>,
 	gesture: Res<CameraGesture>,
-	mut grabbed_ground_point: Local<Option<Vec3>>,
+	mouse_motion: Res<AccumulatedMouseMotion>,
 ) {
 	if *gesture != CameraGesture::Panning {
-		*grabbed_ground_point = None;
 		return;
 	}
 
-	let (mut editor_camera, camera, camera_transform) = camera.into_inner();
-	let Some(ground_point) = cursor_ground_point(*window, camera, camera_transform) else {
-		return;
-	};
-
-	match *grabbed_ground_point {
-		None => *grabbed_ground_point = Some(ground_point),
-		Some(grabbed_point) => editor_camera.target_point += grabbed_point - ground_point,
-	}
+	// A ground ray becomes unstable near the horizon; pointer motion stays bounded.
+	let yaw = Quat::from_rotation_y(camera.azimuth);
+	let pointer_motion = mouse_motion.delta;
+	let ground_motion = yaw * Vec3::new(-pointer_motion.x, 0.0, -pointer_motion.y);
+	let pan_distance = camera.distance_from_focus * PAN_FOCUS_DISTANCES_PER_PIXEL;
+	camera.target_point += ground_motion * pan_distance;
 }
 
 const KEYBOARD_PAN_FOCUS_DISTANCES_PER_SECOND: f32 = 1.0;
@@ -359,10 +352,24 @@ fn apply_editor_camera_input_zoom(
 	);
 }
 
-// Wrapper for the Wallgraph system, needed since wall_graph is seperate from Bevy
+/// Keeps house geometry independent of Bevy entities.
 #[derive(Resource, Default)]
-struct House(WallGraph);
+struct House(
+	#[expect(dead_code, reason = "wall placement will use the graph in step 2")] WallGraph,
+);
 
-fn temp_probe(house: Res<House>) {
-	println!("The house has {} walls", house.0.walls().count());
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn framing_moves_back_for_a_narrow_viewport() {
+		let mut landscape = EditorCamera::default();
+		landscape.frame(Vec3::ZERO, 5.0, FRAC_PI_2, 2.0);
+
+		let mut portrait = EditorCamera::default();
+		portrait.frame(Vec3::ZERO, 5.0, FRAC_PI_2, 0.5);
+
+		assert!(portrait.distance_from_focus > landscape.distance_from_focus);
+	}
 }
