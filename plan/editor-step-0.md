@@ -20,7 +20,7 @@ you. Keep the existing `house_builder` mesh inspector intact.
 
 ## Tasks
 
-### 0.1 Create the app target
+### 0.1 Create the app target (Done)
 
 Create a small binary crate for the editor (the order document proposes
 `crates/house_editor`) and add it to the workspace. Start with one entry point.
@@ -34,7 +34,7 @@ custom plugin or a module tree yet.
 inspector still works independently. The editor contains no copied demo graph,
 toolbar, or rendering code.
 
-### 0.2 Make the empty scene legible
+### 0.2 Make the empty scene legible (done)
 
 Spawn one 3D camera looking toward the origin, a horizontal ground plane, and
 enough lighting or an unlit material to see the plane. Give the editor window a

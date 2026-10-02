@@ -4,19 +4,22 @@ use bevy::{
 	input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
 	log::{DEFAULT_FILTER, LogPlugin},
 	prelude::*,
+	ui::FocusPolicy,
 	window::PrimaryWindow,
 };
 use wall_graph::WallGraph;
 
 fn main() {
 	// Reset runs first so this frame's orbit/pan/zoom input applies on top of the reset view.
+	// `update_camera_gesture` always runs so an unfocused window cancels a drag in progress.
 	let camera_system = (
-		request_camera_reset_from_keyboard,
+		update_camera_gesture,
+		request_camera_reset_from_keyboard.run_if(window_focused),
 		handle_reset_camera,
 		apply_editor_camera_input_orbit,
 		apply_editor_camera_input_pan,
-		apply_editor_camera_input_keyboard_pan,
-		apply_editor_camera_input_zoom,
+		apply_editor_camera_input_keyboard_pan.run_if(window_focused),
+		apply_editor_camera_input_zoom.run_if(window_focused.and_then(not(pointer_over_ui))),
 		apply_editor_camera,
 	);
 
@@ -38,8 +41,9 @@ fn main() {
 				}),
 		)
 		.init_resource::<House>()
+		.init_resource::<CameraGesture>()
 		.add_message::<ResetCamera>()
-		.add_systems(Startup, setup_scene)
+		.add_systems(Startup, (setup_scene, setup_editor_panel))
 		.add_systems(Startup, temp_probe)
 		.add_systems(Update, camera_system.chain())
 		.run();
@@ -66,6 +70,41 @@ fn setup_scene(
 	));
 
 	commands.spawn((Camera3d::default(), EditorCamera::default()));
+}
+
+/// Marks the editor's UI side panel, so input code can tell when the pointer is over it.
+#[derive(Component)]
+struct EditorPanel;
+
+fn setup_editor_panel(mut commands: Commands) {
+	commands
+		.spawn((
+			Name::new("editor-panel"),
+			EditorPanel,
+			Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(0.0),
+				top: Val::Px(0.0),
+				width: Val::Px(240.0),
+				height: Val::Percent(100.0),
+				padding: UiRect::all(Val::Px(12.0)),
+				..default()
+			},
+			BackgroundColor(Color::srgba(0.1, 0.1, 0.12, 0.9)),
+			// Without `Interaction` the node is never hover-tested, and `Block` stops
+			// the pointer from also counting as over anything underneath.
+			Interaction::default(),
+			FocusPolicy::Block,
+		))
+		.with_child((
+			Button,
+			Node {
+				padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+				..default()
+			},
+			BackgroundColor(Color::srgb(0.25, 0.25, 0.3)),
+			children![Text::new("Test button")],
+		));
 }
 
 /// Orbit camera state, in radians and metres. The camera's `Transform` is derived from it.
@@ -159,16 +198,73 @@ fn apply_editor_camera(camera: Single<(&mut Transform, &EditorCamera)>) {
 		editor_camera.target_point + rotation * (Vec3::Z * editor_camera.distance_from_focus);
 }
 
+fn window_focused(window: Single<&Window, With<PrimaryWindow>>) -> bool {
+	window.focused
+}
+
+fn pointer_over_ui(interactions: Query<&Interaction>) -> bool {
+	is_ui_interacted(&interactions)
+}
+
+fn is_ui_interacted(interactions: &Query<&Interaction>) -> bool {
+	interactions
+		.iter()
+		.any(|interaction| *interaction != Interaction::None)
+}
+
+#[derive(Resource, Default, PartialEq)]
+enum CameraGesture {
+	#[default]
+	Idle,
+	Orbiting,
+	Panning,
+}
+
+const ORBIT_BUTTON: MouseButton = MouseButton::Right;
+const PAN_BUTTON: MouseButton = MouseButton::Middle;
+
+fn update_camera_gesture(
+	mut gesture: ResMut<CameraGesture>,
+	window: Single<&Window, With<PrimaryWindow>>,
+	mouse_button: Res<ButtonInput<MouseButton>>,
+	interactions: Query<&Interaction>,
+) {
+	if !window.focused {
+		*gesture = CameraGesture::Idle;
+		return;
+	}
+
+	let held_button = match *gesture {
+		CameraGesture::Idle => None,
+		CameraGesture::Orbiting => Some(ORBIT_BUTTON),
+		CameraGesture::Panning => Some(PAN_BUTTON),
+	};
+	if held_button.is_some_and(|button| mouse_button.pressed(button)) {
+		return;
+	}
+	*gesture = CameraGesture::Idle;
+
+	if is_ui_interacted(&interactions) {
+		return;
+	}
+
+	if mouse_button.just_pressed(ORBIT_BUTTON) {
+		*gesture = CameraGesture::Orbiting;
+	} else if mouse_button.just_pressed(PAN_BUTTON) {
+		*gesture = CameraGesture::Panning;
+	}
+}
+
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.005;
 const CAMERA_ELEVATION_MIN: f32 = 0.3;
 const CAMERA_ELEVATION_MAX: f32 = FRAC_PI_2 - 0.01;
 
 fn apply_editor_camera_input_orbit(
 	mut camera: Single<&mut EditorCamera>,
-	mouse_button: Res<ButtonInput<MouseButton>>,
+	gesture: Res<CameraGesture>,
 	mouse_motion: Res<AccumulatedMouseMotion>,
 ) {
-	if !mouse_button.pressed(MouseButton::Right) {
+	if *gesture != CameraGesture::Orbiting {
 		return;
 	}
 
@@ -194,10 +290,10 @@ fn cursor_ground_point(
 fn apply_editor_camera_input_pan(
 	camera: Single<(&mut EditorCamera, &Camera, &GlobalTransform)>,
 	window: Single<&Window, With<PrimaryWindow>>,
-	mouse_button: Res<ButtonInput<MouseButton>>,
+	gesture: Res<CameraGesture>,
 	mut grabbed_ground_point: Local<Option<Vec3>>,
 ) {
-	if !mouse_button.pressed(MouseButton::Middle) {
+	if *gesture != CameraGesture::Panning {
 		*grabbed_ground_point = None;
 		return;
 	}

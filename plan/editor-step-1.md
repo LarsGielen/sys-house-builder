@@ -7,7 +7,7 @@ time and use the checks to judge how it feels.
 
 ## Tasks
 
-### 1.1 Give the camera explicit orbit state
+### 1.1 Give the camera explicit orbit state (Done)
 
 Represent the camera's focus point, distance, yaw, and pitch as editor state.
 One reasonable choice is a component on the camera; it gives a camera update
@@ -23,9 +23,9 @@ reset agree about the focus point.
 **Check:** changing the initial focus or distance changes the view in the way
 you expect. The camera keeps looking at its focus.
 
-### 1.2 Add middle-button orbit
+### 1.2 Add right-button orbit (Done)
 
-While middle mouse is held, horizontal pointer motion changes yaw and vertical
+While right mouse is held, horizontal pointer motion changes yaw and vertical
 motion changes pitch. Clamp pitch so the camera cannot flip or travel below
 the ground. Keep left-button motion unused by the camera. Mouse motion is
 already a per-frame delta; avoid multiplying it by frame time a second time.
@@ -37,9 +37,9 @@ Choose a sensitivity that feels steady at different frame rates.
 **Check:** orbit works in both directions, pitch stops cleanly at its limits,
 and left drag does nothing to the camera.
 
-### 1.3 Add right-button pan
+### 1.3 Add middle-button pan (Done)
 
-Right drag moves the focus across the ground plane; the camera follows because
+middle drag moves the focus across the ground plane; the camera follows because
 its transform is derived from that focus. Pan relative to the current camera
 orientation, so dragging still feels sensible after orbiting. Scale the pan
 speed with camera distance so a far-away view does not move painfully slowly.
@@ -52,7 +52,7 @@ nearly zero instead of normalizing it blindly.
 **Check:** pan does not change yaw, pitch, or distance. The focus stays on the
 ground plane, and movement is useful at both near and far zoom levels.
 
-### 1.4 Add wheel zoom
+### 1.4 Add wheel zoom (Done)
 
 Wheel input changes orbit distance while leaving the focus in place. Clamp the
 distance to avoid passing through the focus or zooming so far out that the
@@ -66,7 +66,7 @@ metres-per-notch change; try both before settling on one.
 **Check:** repeated scrolling never crosses the near or far limits. Orbit and
 pan still feel predictable after zooming.
 
-### 1.5 Add a reset/focus action and scale cues
+### 1.5 Add a reset/focus action and scale cues (Done)
 
 Provide one simple action that returns the camera to a known view of the
 origin. It can be a key or a minimal UI button for now. Later the same camera
@@ -81,7 +81,7 @@ from implementing the same camera math twice.
 **Check:** after arbitrary orbit, pan, and zoom, reset returns to the same
 useful view. You can tell how large one metre is.
 
-### 1.6 Keep UI and viewport input separate
+### 1.6 Keep UI and viewport input separate (Done)
 
 Add a small editor UI region so you can test pointer ownership. Camera gestures
 should not start when the pointer is over that region. Ignore camera input
