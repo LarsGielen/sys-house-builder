@@ -151,7 +151,7 @@ fn viewport_keyboard_input_allowed(
 		&& input_focus.is_none_or(|focus| focus.get().is_none_or(|entity| entity == window_entity))
 }
 
-fn is_ui_interacted(interactions: &Query<&Interaction>) -> bool {
+pub fn is_ui_interacted(interactions: &Query<&Interaction>) -> bool {
 	interactions
 		.iter()
 		.any(|interaction| *interaction != Interaction::None)

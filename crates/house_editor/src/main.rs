@@ -1,4 +1,9 @@
+mod coordinates;
+mod edit;
+mod ground_pointer;
 mod orbit_camera;
+mod snapping;
+mod wall_render;
 
 use bevy::{
 	log::{DEFAULT_FILTER, LogPlugin},
@@ -6,8 +11,13 @@ use bevy::{
 	ui::FocusPolicy,
 };
 
+use edit::{WallProposal, propose_wall};
+use ground_pointer::GroundPointerPlugin;
 use orbit_camera::{OrbitCamera, OrbitCameraPlugin};
-use wall_graph::WallGraph;
+use snapping::{SnappingPlugin, snap_controls};
+use wall_graph::{WallDimensions, WallGraph};
+use wall_mesh::WallMesh;
+use wall_render::WallRenderPlugin;
 
 fn main() {
 	App::new()
@@ -27,9 +37,15 @@ fn main() {
 					..default()
 				}),
 		)
-		.add_plugins(OrbitCameraPlugin)
+		.add_plugins((
+			OrbitCameraPlugin,
+			WallRenderPlugin,
+			GroundPointerPlugin,
+			SnappingPlugin,
+		))
 		.init_resource::<House>()
 		.add_systems(Startup, (setup_scene, setup_editor_panel))
+		.add_systems(Update, commit_test_wall)
 		.run();
 }
 
@@ -67,6 +83,8 @@ fn setup_editor_panel(mut commands: Commands) {
 				width: Val::Px(240.0),
 				height: Val::Percent(100.0),
 				padding: UiRect::all(Val::Px(12.0)),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(12.0),
 				..default()
 			},
 			BackgroundColor(Color::srgba(0.1, 0.1, 0.12, 0.9)),
@@ -83,11 +101,48 @@ fn setup_editor_panel(mut commands: Commands) {
 			},
 			BackgroundColor(Color::srgb(0.25, 0.25, 0.3)),
 			children![Text::new("Test button")],
-		));
+		))
+		.with_child(snap_controls());
 }
 
-/// Keeps house geometry independent of Bevy entities.
+/// The committed house. Keeps geometry independent of Bevy entities; `mesh` is always
+/// generated from `graph`, so replace both together.
 #[derive(Resource, Default)]
-struct House(
-	#[expect(dead_code, reason = "wall placement will use the graph in step 2")] WallGraph,
-);
+struct House {
+	graph: WallGraph,
+	mesh: WallMesh,
+}
+
+/// Temporary driver until pointer drafting exists: each Enter press commits the next
+/// side of a 3 m square through the same propose/commit path later tools will use.
+fn commit_test_wall(
+	keys: Res<ButtonInput<KeyCode>>,
+	mut house: ResMut<House>,
+	mut next_corner: Local<usize>,
+) {
+	const CORNERS: [Vec2; 5] = [
+		Vec2::new(0.0, 0.0),
+		Vec2::new(3.0, 0.0),
+		Vec2::new(3.0, 3.0),
+		Vec2::new(0.0, 3.0),
+		Vec2::new(0.0, 0.0),
+	];
+
+	if !keys.just_pressed(KeyCode::Enter) || *next_corner + 1 >= CORNERS.len() {
+		return;
+	}
+
+	let proposal = WallProposal {
+		start: CORNERS[*next_corner],
+		end: CORNERS[*next_corner + 1],
+		dimensions: WallDimensions::default(),
+	};
+	match propose_wall(&house.graph, &proposal) {
+		Ok(candidate) => {
+			house.graph = candidate.graph;
+			house.mesh = candidate.mesh;
+			*next_corner += 1;
+		}
+		Err(error) => error!("wall rejected: {error}"),
+	}
+}

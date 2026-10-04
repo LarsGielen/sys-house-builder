@@ -7,7 +7,7 @@ tools will use. Keep the house graph independent of Bevy.
 
 ## Tasks
 
-### 2.1 Establish a draft and commit boundary
+### 2.1 Establish a draft and commit boundary (Done)
 
 Keep pointer-driven draft state separate from the committed `WallGraph`. Give a
 proposed edit one place to report either a valid result or a graph/mesh error.
@@ -22,7 +22,7 @@ validate a candidate, then replace the committed value only on success.
 **Check:** cancellation and failed validation leave the graph and displayed
 house unchanged. The error is visible and clears when the draft becomes valid.
 
-### 2.2 Convert graph coordinates to a Bevy mesh
+### 2.2 Convert graph coordinates to a Bevy mesh (Done)
 
 Adapt `wall_mesh::generate` output into Bevy mesh assets. Map graph `(x, y, z)`
 to Bevy `(x, z, -y)` as chosen in step 0. Apply the same transform to positions,
@@ -36,7 +36,7 @@ The first adapter can rebuild all walls rather than update pieces incrementally.
 **Check:** one wall appears in the expected direction and size. A second edit
 refreshes the display without leaving old geometry behind.
 
-### 2.3 Turn a pointer position into a floor-plan point
+### 2.3 Turn a pointer position into a floor-plan point (Done)
 
 Cast the active camera's pointer ray onto the ground plane, and translate the
 hit back to graph XY. Only accept a hit when the pointer belongs to the
@@ -50,7 +50,7 @@ types where practical.
 **Check:** a cursor marker tracks the ground under the pointer at several
 camera angles. UI interaction does not start a wall draft.
 
-### 2.4 Add snapping with visible priority
+### 2.4 Add snapping with visible priority (Done)
 
 Collect eligible junction/corner, wall, and grid candidates near the pointer.
 Choose a target by priority in that order, then by screen-space distance within
