@@ -65,7 +65,7 @@ target is convenient to select on screen.
 snapping gives the unsnapped ground hit. Changing grid spacing changes only
 grid candidates.
 
-### 2.5 Draw and preview straight walls
+### 2.5 Draw and preview straight walls (Done)
 
 In the wall tool, the first left press starts a draft. A movement threshold
 distinguishes a click from a drag: release after a drag confirms, while a click
