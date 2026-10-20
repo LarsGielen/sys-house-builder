@@ -22,6 +22,11 @@ const SCROLL_PIXELS_PER_LINE: f32 = 40.0;
 
 pub struct OrbitCameraPlugin;
 
+/// All camera input and pose updates, in `Update`. Other plugins can order their
+/// systems relative to this set without the camera depending on their schedules.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OrbitCameraSystems;
+
 impl Plugin for OrbitCameraPlugin {
 	fn build(&self, app: &mut App) {
 		// Reset runs first so this frame's orbit/pan/zoom input applies on top of the reset view.
@@ -30,23 +35,26 @@ impl Plugin for OrbitCameraPlugin {
 			update_orbit_gesture,
 			request_orbit_camera_reset_from_keyboard.run_if(viewport_keyboard_input_allowed),
 			handle_reset_orbit_camera,
-			apply_orbit_camera_input_orbit,
-			apply_orbit_camera_input_pan,
-			apply_orbit_camera_input_keyboard_pan.run_if(viewport_keyboard_input_allowed),
-			apply_orbit_camera_input_zoom.run_if(window_focused.and_then(not(pointer_over_ui))),
+			apply_mouse_orbit,
+			apply_mouse_pan,
+			apply_keyboard_pan.run_if(viewport_keyboard_input_allowed),
+			apply_scroll_zoom.run_if(window_focused.and_then(not(pointer_over_ui))),
 			apply_orbit_camera,
 		);
 
 		app.init_resource::<OrbitGesture>()
 			.add_message::<ResetOrbitCamera>()
-			.add_systems(Update, orbit_camera_system.chain());
+			.add_systems(
+				Update,
+				orbit_camera_system.chain().in_set(OrbitCameraSystems),
+			);
 	}
 }
 
 /// Orbit camera state, in radians and metres. The camera's `Transform` is derived from it.
 #[derive(Component)]
 pub struct OrbitCamera {
-	target_point: Vec3,
+	focus_point: Vec3,
 	azimuth: f32,
 	elevation: f32,
 	distance_from_focus: f32,
@@ -55,7 +63,7 @@ pub struct OrbitCamera {
 impl Default for OrbitCamera {
 	fn default() -> Self {
 		Self {
-			target_point: Vec3::ZERO,
+			focus_point: Vec3::ZERO,
 			azimuth: 0.0,
 			elevation: 0.5,
 			distance_from_focus: 10.0,
@@ -69,9 +77,9 @@ fn clamp_camera_distance(distance: f32) -> f32 {
 
 impl OrbitCamera {
 	/// Looks at `center` from far enough away that a sphere of `radius` fits in view.
-	/// Keeps the current viewing angle.
+	/// Keeps the current viewing angle. The maximum camera distance can limit the fit.
 	fn frame(&mut self, center: Vec3, radius: f32, vertical_fov: f32, aspect_ratio: f32) {
-		self.target_point = center;
+		self.focus_point = center;
 		let vertical_half_fov = vertical_fov / 2.0;
 		let horizontal_half_fov = (vertical_half_fov.tan() * aspect_ratio).atan();
 		let limiting_half_fov = vertical_half_fov.min(horizontal_half_fov);
@@ -129,7 +137,7 @@ fn apply_orbit_camera(camera: Single<(&mut Transform, &OrbitCamera)>) {
 	// The camera looks along its local -Z, so it sits behind the target along +Z.
 	transform.rotation = rotation;
 	transform.translation =
-		orbit_camera.target_point + rotation * (Vec3::Z * orbit_camera.distance_from_focus);
+		orbit_camera.focus_point + rotation * (Vec3::Z * orbit_camera.distance_from_focus);
 }
 
 fn window_focused(window: Single<&Window, With<PrimaryWindow>>) -> bool {
@@ -137,7 +145,7 @@ fn window_focused(window: Single<&Window, With<PrimaryWindow>>) -> bool {
 }
 
 fn pointer_over_ui(interactions: Query<&Interaction>) -> bool {
-	is_ui_interacted(&interactions)
+	any_ui_interaction_active(&interactions)
 }
 
 fn viewport_keyboard_input_allowed(
@@ -147,11 +155,11 @@ fn viewport_keyboard_input_allowed(
 ) -> bool {
 	let (window_entity, window) = *window;
 	window.focused
-		&& !is_ui_interacted(&interactions)
+		&& !any_ui_interaction_active(&interactions)
 		&& input_focus.is_none_or(|focus| focus.get().is_none_or(|entity| entity == window_entity))
 }
 
-pub fn is_ui_interacted(interactions: &Query<&Interaction>) -> bool {
+fn any_ui_interaction_active(interactions: &Query<&Interaction>) -> bool {
 	interactions
 		.iter()
 		.any(|interaction| *interaction != Interaction::None)
@@ -191,7 +199,7 @@ fn update_orbit_gesture(
 	}
 	finish_orbit_gesture(&mut gesture, window, cursor);
 
-	if is_ui_interacted(&interactions) {
+	if any_ui_interaction_active(&interactions) {
 		return;
 	}
 
@@ -225,7 +233,7 @@ fn finish_orbit_gesture(
 	cursor.visible = true;
 }
 
-fn apply_orbit_camera_input_orbit(
+fn apply_mouse_orbit(
 	mut camera: Single<&mut OrbitCamera>,
 	gesture: Res<OrbitGesture>,
 	mouse_motion: Res<AccumulatedMouseMotion>,
@@ -241,7 +249,7 @@ fn apply_orbit_camera_input_orbit(
 		.clamp(CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
 }
 
-fn apply_orbit_camera_input_pan(
+fn apply_mouse_pan(
 	mut camera: Single<&mut OrbitCamera>,
 	gesture: Res<OrbitGesture>,
 	mouse_motion: Res<AccumulatedMouseMotion>,
@@ -255,10 +263,10 @@ fn apply_orbit_camera_input_pan(
 	let pointer_motion = mouse_motion.delta;
 	let ground_motion = yaw * Vec3::new(-pointer_motion.x, 0.0, -pointer_motion.y);
 	let pan_distance = camera.distance_from_focus * PAN_FOCUS_DISTANCES_PER_PIXEL;
-	camera.target_point += ground_motion * pan_distance;
+	camera.focus_point += ground_motion * pan_distance;
 }
 
-fn apply_orbit_camera_input_keyboard_pan(
+fn apply_keyboard_pan(
 	mut camera: Single<&mut OrbitCamera>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	time: Res<Time>,
@@ -281,10 +289,10 @@ fn apply_orbit_camera_input_keyboard_pan(
 	let yaw = Quat::from_rotation_y(camera.azimuth);
 	let distance =
 		camera.distance_from_focus * KEYBOARD_PAN_FOCUS_DISTANCES_PER_SECOND * time.delta_secs();
-	camera.target_point += yaw * Vec3::new(direction.x, 0.0, -direction.y) * distance;
+	camera.focus_point += yaw * Vec3::new(direction.x, 0.0, -direction.y) * distance;
 }
 
-fn apply_orbit_camera_input_zoom(
+fn apply_scroll_zoom(
 	mut camera: Single<&mut OrbitCamera>,
 	mouse_scroll: Res<AccumulatedMouseScroll>,
 ) {
@@ -304,17 +312,5 @@ fn apply_orbit_camera_input_zoom(
 }
 
 #[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn framing_moves_back_for_a_narrow_viewport() {
-		let mut landscape = OrbitCamera::default();
-		landscape.frame(Vec3::ZERO, 5.0, FRAC_PI_2, 2.0);
-
-		let mut portrait = OrbitCamera::default();
-		portrait.frame(Vec3::ZERO, 5.0, FRAC_PI_2, 0.5);
-
-		assert!(portrait.distance_from_focus > landscape.distance_from_focus);
-	}
-}
+#[path = "tests/orbit_camera.rs"]
+mod tests;

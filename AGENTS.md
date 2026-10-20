@@ -27,6 +27,16 @@ unchanged. Use explicit errors for invalid input, preserve identifier stability
 where stale handles may exist, and keep tolerance-based geometric comparisons
 consistent.
 
+# Tests
+
+Keep test implementations in each crate's `src/tests/` directory, grouped by
+module or topic, rather than inline in production source files.
+
+Declare unit test modules with `#[cfg(test)]` and `#[path = "tests/<module>.rs"]`
+in the module being tested. This keeps tests able to access private internals
+through `use super::*` without widening production visibility. A `src/tests.rs`
+index may organize larger suites into topic files under `src/tests/`.
+
 # Formatting
 
 Follow the repository's established formatting configuration and run the

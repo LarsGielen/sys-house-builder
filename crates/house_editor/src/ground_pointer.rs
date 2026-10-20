@@ -1,28 +1,33 @@
 use bevy::{
 	prelude::*,
+	transform::helper::TransformHelper,
 	window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use crate::{
-	coordinates::{bevy_to_graph, graph_to_bevy},
-	orbit_camera::is_ui_interacted,
-};
+use crate::coordinates::{bevy_to_graph, graph_to_bevy};
 
 const CURSOR_MARKER_RADIUS: f32 = 0.05;
 
 /// Tracks where the pointer meets the ground and shows a marker there.
 pub struct GroundPointerPlugin;
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GroundPointerSystems {
+	Pick,
+	Presentation,
+}
+
 impl Plugin for GroundPointerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<GroundPointer>()
 			.add_systems(Startup, spawn_cursor_marker)
-			.add_systems(Update, move_cursor_marker)
-			// The ray must use this frame's camera pose, which only reaches `GlobalTransform`
-			// once transforms are propagated.
 			.add_systems(
 				PostUpdate,
-				update_ground_pointer.after(TransformSystems::Propagate),
+				update_ground_pointer.in_set(GroundPointerSystems::Pick),
+			)
+			.add_systems(
+				PostUpdate,
+				move_cursor_marker.in_set(GroundPointerSystems::Presentation),
 			);
 	}
 }
@@ -39,7 +44,7 @@ pub struct PointerOnGround {
 /// The pointer's ground hit.
 ///
 /// `None` when the pointer is not over the viewport, the window is unfocused, the
-/// mouse is owned by a camera gesture, or the pointer ray never reaches the ground.
+/// mouse is owned by a camera gesture, the pointer is over UI, or its ray misses the ground.
 #[derive(Resource, Default)]
 pub struct GroundPointer {
 	pub hit: Option<PointerOnGround>,
@@ -66,25 +71,31 @@ fn spawn_cursor_marker(
 	));
 }
 
-pub fn update_ground_pointer(
+fn update_ground_pointer(
 	mut ground_pointer: ResMut<GroundPointer>,
 	window_and_cursor: Single<(&Window, &CursorOptions), With<PrimaryWindow>>,
-	camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+	camera: Single<(Entity, &Camera), With<Camera3d>>,
+	transforms: TransformHelper,
 	interactions: Query<&Interaction>,
 ) {
 	let (window, cursor) = *window_and_cursor;
-	let (camera, camera_transform) = *camera;
+	let (camera_entity, camera) = *camera;
+	let camera_transform = transforms
+		.compute_global_transform(camera_entity)
+		.expect("the editor camera and its ancestors must have transforms");
 
 	// A locked cursor means a camera gesture owns the mouse, and its position is stale.
 	let viewport_owns_pointer = window.focused
 		&& cursor.grab_mode == CursorGrabMode::None
-		&& !is_ui_interacted(&interactions);
+		&& !interactions
+			.iter()
+			.any(|interaction| *interaction != Interaction::None);
 
 	ground_pointer.hit = viewport_owns_pointer
 		.then(|| {
 			let viewport_position = window.cursor_position()?;
 			let ray = camera
-				.viewport_to_world(camera_transform, viewport_position)
+				.viewport_to_world(&camera_transform, viewport_position)
 				.ok()?;
 			Some(PointerOnGround {
 				viewport_position,
@@ -117,25 +128,5 @@ fn move_cursor_marker(
 }
 
 #[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn downward_ray_hits_the_ground_in_graph_coordinates() {
-		let ray = Ray3d::new(Vec3::new(1.0, 5.0, 2.0), Dir3::NEG_Y);
-		// Bevy z = 2 is graph y = -2.
-		assert_eq!(ground_hit(ray), Some(Vec2::new(1.0, -2.0)));
-	}
-
-	#[test]
-	fn ray_pointing_away_from_the_ground_has_no_hit() {
-		let ray = Ray3d::new(Vec3::new(0.0, 5.0, 0.0), Dir3::Y);
-		assert_eq!(ground_hit(ray), None);
-	}
-
-	#[test]
-	fn ray_parallel_to_the_ground_has_no_hit() {
-		let ray = Ray3d::new(Vec3::new(0.0, 5.0, 0.0), Dir3::X);
-		assert_eq!(ground_hit(ray), None);
-	}
-}
+#[path = "tests/ground_pointer.rs"]
+mod tests;
