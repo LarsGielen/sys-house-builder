@@ -49,7 +49,8 @@ An opening belongs to one current wall piece. `add_opening` takes an `OpeningSpe
 with its center distance along the wall path, width, bottom elevation, and opening
 height, all in metres. `opening`, `openings`, and `opening_position` query them;
 `set_opening` and `remove_opening` edit them independently of the wall. Opening
-IDs stay stable through ordinary edits and `optimize`. A wall removal removes
+`opening_bounds` returns the path distances between which an opening keeps clear of
+the walls joined at the host's ends. Opening IDs stay stable through ordinary edits and `optimize`. A wall removal removes
 its openings. Splits and merges keep an opening's world position; an insertion
 that would cut through or crowd an opening is rejected atomically.
 

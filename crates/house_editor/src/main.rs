@@ -9,6 +9,7 @@ mod snapping;
 mod wall_render;
 mod wall_tool_active;
 mod wall_tool_drawing;
+mod wall_tool_opening;
 mod wall_tool_selection;
 
 use bevy::prelude::*;
@@ -21,6 +22,7 @@ use snapping::SnappingPlugin;
 use wall_render::WallRenderPlugin;
 use wall_tool_active::WallToolActivePlugin;
 use wall_tool_drawing::WallToolDrawingPlugin;
+use wall_tool_opening::WallToolOpeningPlugin;
 use wall_tool_selection::WallToolSelectionPlugin;
 
 fn main() {
@@ -42,6 +44,7 @@ fn main() {
 			SnappingPlugin,
 			WallToolActivePlugin,
 			WallToolDrawingPlugin,
+			WallToolOpeningPlugin,
 			WallToolSelectionPlugin,
 		))
 		.init_resource::<House>()

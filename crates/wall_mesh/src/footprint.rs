@@ -121,6 +121,41 @@ pub(crate) fn build(snapshot: &Snapshot, settings: &MeshSettings) -> Result<Foot
 	})
 }
 
+/// Path distances between which `wall`'s openings leave the minimum pier at every resolved
+/// junction. A free end has no pier, so it bounds nothing beyond the wall itself.
+pub(crate) fn opening_bounds(
+	snapshot: &Snapshot,
+	wall: usize,
+	settings: &MeshSettings,
+) -> Result<(f64, f64), MeshError> {
+	let mut builder = Builder {
+		snapshot,
+		settings,
+		vertices: Vec::new(),
+		vertex_junction: Vec::new(),
+		junction_vertices: vec![Vec::new(); snapshot.nodes.len()],
+		cells: Vec::new(),
+	};
+	let mut bounds = (0.0, snapshot.walls[wall].path.length());
+	for node in 0..snapshot.nodes.len() {
+		let node_walls = &snapshot.nodes[node].walls;
+		if node_walls.len() < 2 || !node_walls.contains(&wall) {
+			continue;
+		}
+		for (resolved, at_origin, end) in builder.resolve_junction(node)? {
+			if resolved != wall {
+				continue;
+			}
+			if at_origin {
+				bounds.0 = end.distance + settings.min_pier_width;
+			} else {
+				bounds.1 = end.distance - settings.min_pier_width;
+			}
+		}
+	}
+	Ok(bounds)
+}
+
 /// Where a wall body starts or ends, in the wall's own direction.
 #[derive(Debug, Clone, Copy)]
 struct Station {

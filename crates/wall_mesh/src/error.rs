@@ -9,6 +9,8 @@ use crate::SurfaceSource;
 pub enum MeshError {
 	/// A setting is not finite or is out of range.
 	InvalidSettings,
+	/// The wall handle is not a current wall of the graph.
+	UnknownWall { wall: Wall },
 	/// A curved wall's inner face would have no positive radius.
 	ArcTooTight { wall: Wall },
 	/// A junction's walls do not form a valid outline.
@@ -32,6 +34,7 @@ impl fmt::Display for MeshError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let message = match self {
 			MeshError::InvalidSettings => "mesh settings must be finite and within range",
+			MeshError::UnknownWall { .. } => "the wall is not a wall of this graph",
 			MeshError::ArcTooTight { .. } => "a curved wall is too thick for its radius",
 			MeshError::UnresolvedJunction { .. } => "a wall junction has no valid outline",
 			MeshError::JunctionTrimsOverlap { .. } => {

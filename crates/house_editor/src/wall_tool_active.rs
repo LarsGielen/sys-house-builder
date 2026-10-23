@@ -6,6 +6,7 @@ pub enum Tool {
 	#[default]
 	Select,
 	DrawWall,
+	PlaceOpening,
 }
 
 /// Owns which tool is active. Tools read it; only [`ActivateTool`] changes it.

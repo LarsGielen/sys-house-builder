@@ -4,7 +4,7 @@ use crate::{
 	editor_ui::EditorUiSystems, ground_pointer::GroundPointerSystems,
 	orbit_camera::OrbitCameraSystems, snapping::SnappingSystems, wall_render::WallRenderSystems,
 	wall_tool_active::WallToolActiveSystems, wall_tool_drawing::WallToolDrawingSystems,
-	wall_tool_selection::WallToolSelectionSystems,
+	wall_tool_opening::WallToolOpeningSystems, wall_tool_selection::WallToolSelectionSystems,
 };
 
 /// Composes the plugins' own system sets into the house editor's frame sequence.
@@ -24,6 +24,7 @@ impl Plugin for EditorSchedulePlugin {
 				GroundPointerSystems::Pick,
 				SnappingSystems::Pick,
 				WallToolDrawingSystems,
+				WallToolOpeningSystems,
 				WallToolSelectionSystems::Pick,
 			)
 				.chain()

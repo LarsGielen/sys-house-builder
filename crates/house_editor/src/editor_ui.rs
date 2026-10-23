@@ -1,7 +1,7 @@
 use bevy::{prelude::*, ui::FocusPolicy};
 
 use crate::{
-	edit::{EditPreview, PreviewState},
+	edit::{EditError, EditPreview, OpeningProposal, PreviewState, Proposal, WallProposal},
 	house::House,
 	snapping::{SnapSettings, SnapSource, SnapTarget, SnappedPointer, snapping_disabled},
 	wall_tool_active::{ActivateTool, ActiveTool, Tool},
@@ -102,6 +102,7 @@ fn tool_controls() -> impl Bundle {
 				children![
 					(step_button("Select"), ToolButton(Tool::Select)),
 					(step_button("Draw wall"), ToolButton(Tool::DrawWall)),
+					(step_button("Opening"), ToolButton(Tool::PlaceOpening)),
 				],
 			),
 			(Text::new(""), SelectionReadout),
@@ -116,6 +117,7 @@ fn update_active_tool_label(
 	label.0 = match active_tool.0 {
 		Tool::Select => "Tool: Select",
 		Tool::DrawWall => "Tool: Draw wall",
+		Tool::PlaceOpening => "Tool: Place opening",
 	}
 	.to_string();
 }
@@ -249,22 +251,49 @@ fn update_wall_readout(
 	let description = match &preview.state {
 		None => String::new(),
 		Some(PreviewState {
-			proposal, outcome, ..
-		}) => {
-			let length = proposal.start.distance(proposal.end);
-			match outcome {
-				Ok(_) => format!(
-					"Length {length:.3} m\nHeight {:.2} m, thickness {:.2} m",
-					proposal.dimensions.height, proposal.dimensions.thickness
-				),
-				Err(error) => format!("Invalid wall ({length:.3} m): {error}"),
-			}
-		}
+			proposal: Proposal::Wall(proposal),
+			outcome,
+			..
+		}) => describe_wall_proposal(proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::Opening(proposal),
+			outcome,
+			..
+		}) => describe_opening_proposal(proposal, outcome.as_ref().err()),
 	};
 
 	// Writing identical text would still trigger a text layout every frame.
 	if readout.0 != description {
 		readout.0 = description;
+	}
+}
+
+fn describe_wall_proposal(proposal: &WallProposal, error: Option<&EditError>) -> String {
+	let length = proposal.start.distance(proposal.end);
+	match error {
+		None => format!(
+			"Length {length:.3} m\nHeight {:.2} m, thickness {:.2} m",
+			proposal.dimensions.height, proposal.dimensions.thickness
+		),
+		Some(error) => format!("Invalid wall ({length:.3} m): {error}"),
+	}
+}
+
+fn describe_opening_proposal(proposal: &OpeningProposal, error: Option<&EditError>) -> String {
+	let spec = proposal.spec;
+	let size = format!(
+		"{:.2} m wide, {:.2} m high, bottom {:.2} m",
+		spec.width, spec.height, spec.bottom
+	);
+	match error {
+		None => format!(
+			"Opening {size}\n{:.3} m along the wall",
+			spec.center_distance
+		),
+		Some(error) => format!(
+			"Invalid opening at {:.3} m along the wall\n{size}: {error}",
+			spec.center_distance
+		),
 	}
 }
 

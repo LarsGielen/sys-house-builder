@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use wall_graph::WallDimensions;
 
 use crate::{
-	edit::{EditPreview, PreviewState, WallProposal, propose_wall},
+	edit::{EditPreview, PreviewState, Proposal, WallProposal, propose_wall},
 	ground_pointer::GroundPointer,
 	house::House,
 	snapping::SnappedPointer,
@@ -124,7 +124,7 @@ fn update_wall_drawing(
 ) {
 	if input.keyboard.just_pressed(KeyCode::Escape) {
 		draft.set_if_neq(WallDraft::Idle);
-		if preview.state.is_some() {
+		if preview.holds_wall_proposal() {
 			preview.state = None;
 		}
 		return;
@@ -162,7 +162,7 @@ fn update_wall_drawing(
 /// Leaving the tool abandons an unfinished wall instead of resuming it on return.
 fn cancel_wall_drawing(mut draft: ResMut<WallDraft>, mut preview: ResMut<EditPreview>) {
 	draft.set_if_neq(WallDraft::Idle);
-	if preview.state.is_some() {
+	if preview.holds_wall_proposal() {
 		preview.state = None;
 	}
 }
@@ -238,14 +238,14 @@ fn update_preview(
 	mut preview: Mut<EditPreview>,
 ) {
 	let Some(start) = draft.start() else {
-		if preview.state.is_some() {
+		if preview.holds_wall_proposal() {
 			preview.state = None;
 		}
 		return;
 	};
 	// Until the pointer leaves the click threshold there is no end worth previewing.
 	if matches!(draft, WallDraft::Pressed { dragged: false, .. }) {
-		if preview.state.is_some() {
+		if preview.holds_wall_proposal() {
 			preview.state = None;
 		}
 		return;
@@ -258,24 +258,28 @@ fn update_preview(
 			dimensions: settings.dimensions(),
 		}
 	} else {
-		let Some(state) = preview.state.as_ref() else {
+		let Some(PreviewState {
+			proposal: Proposal::Wall(previous),
+			..
+		}) = preview.state.as_ref()
+		else {
 			return;
 		};
 		WallProposal {
 			start,
 			dimensions: settings.dimensions(),
-			..state.proposal
+			..*previous
 		}
 	};
 	let up_to_date = preview.state.as_ref().is_some_and(|state| {
-		state.proposal == proposal && state.house_revision == house.revision()
+		state.proposal == Proposal::Wall(proposal) && state.house_revision == house.revision()
 	});
 	if up_to_date {
 		return;
 	}
 	preview.state = Some(PreviewState {
 		house_revision: house.revision(),
-		proposal,
+		proposal: Proposal::Wall(proposal),
 		outcome: propose_wall(house.graph(), &proposal),
 	});
 }

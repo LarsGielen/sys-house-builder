@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 use std::fmt;
+use std::ops::RangeInclusive;
 
 use glam::{DVec2, Vec2};
 
@@ -12,6 +13,9 @@ const DIRECTION_ANGLE_TOLERANCE: f32 = crate::geometry::ANGLE_TOLERANCE as f32;
 
 /// Points at most this far apart count as the same contact; point-on-curve tests use this tolerance.
 const DISTANCE_TOLERANCE: f32 = crate::geometry::DISTANCE_TOLERANCE as f32;
+
+/// Halvings used to locate the edge of the clear stretch beside a junction.
+const BOUNDS_SEARCH_STEPS: u32 = 40;
 
 /// Identifies a node in one [`WallGraph`].
 ///
@@ -1088,6 +1092,69 @@ impl WallGraph {
 		)
 	}
 
+	/// The walls meeting `wall` at its ends, with how far an opening must stay from each
+	/// one's centerline.
+	fn junction_obstacles(&self, wall: Wall) -> Vec<(Curve, f64)> {
+		[wall.origin, wall.destination]
+			.into_iter()
+			.flat_map(|node| self.outgoing_half_edges(node))
+			.filter(|&edge| edge != wall.forward && edge != wall.backward)
+			.map(|edge| {
+				let thickness = self.wall_data[&edge.min(self.edge(edge).twin)]
+					.dimensions
+					.thickness as f64;
+				(
+					self.half_edge_curve(edge),
+					thickness * 0.5 + CORNER_CLEARANCE,
+				)
+			})
+			.collect()
+	}
+
+	/// Returns the path distances between which openings on a wall keep clear of the walls
+	/// joined at its ends, or `None` for a stale handle or a wall with no clear stretch.
+	///
+	/// An opening whose start and end both lie in this range passes the junction check of
+	/// [`add_opening`](Self::add_opening); the bounds depend on the angles and thicknesses of
+	/// the joined walls, not on the opening. Overlap with other openings is not considered.
+	pub fn opening_bounds(&self, wall: Wall) -> Option<RangeInclusive<f64>> {
+		self.validate_wall_handle(wall).ok()?;
+		let curve = self.half_edge_curve(wall.forward);
+		let length = curve.length();
+		let obstacles = self.junction_obstacles(wall);
+		let clear = |start: f64, end: f64| {
+			obstacles.iter().all(|&(other, clearance)| {
+				curve_clears_other(curve, start / length, end / length, other, clearance)
+			})
+		};
+
+		// Each half is searched toward the middle, where clearance is gained monotonically.
+		let middle = length * 0.5;
+		if !clear(middle, middle) {
+			return None;
+		}
+		let nearest_clear = |from: f64, is_clear: &dyn Fn(f64) -> bool| {
+			if is_clear(from) {
+				return from;
+			}
+			let (mut blocked, mut clear) = (from, middle);
+			for _ in 0..BOUNDS_SEARCH_STEPS {
+				let candidate = (blocked + clear) * 0.5;
+				if is_clear(candidate) {
+					clear = candidate;
+				} else {
+					blocked = candidate;
+				}
+			}
+			clear
+		};
+		Some(
+			nearest_clear(0.0, &|start| clear(start, middle))..=nearest_clear(length, &|end| {
+				clear(middle, end)
+			}),
+		)
+	}
+
 	fn validate_openings(&self) -> Result<(), WallError> {
 		for (&id, opening) in &self.openings {
 			self.validate_wall_handle(opening.wall)?;
@@ -1139,24 +1206,9 @@ impl WallGraph {
 			}
 		}
 		let wall_curve = self.half_edge_curve(wall.forward);
-		for node in [wall.origin, wall.destination] {
-			for edge in self.outgoing_half_edges(node) {
-				if edge == wall.forward || edge == wall.backward {
-					continue;
-				}
-				let other = self.half_edge_curve(edge);
-				let thickness = self.wall_data[&edge.min(self.edge(edge).twin)]
-					.dimensions
-					.thickness as f64;
-				if !curve_clears_other(
-					wall_curve,
-					start / length,
-					end / length,
-					other,
-					thickness * 0.5 + CORNER_CLEARANCE,
-				) {
-					return Err(WallError::OpeningTooCloseToJunction);
-				}
+		for (other, clearance) in self.junction_obstacles(wall) {
+			if !curve_clears_other(wall_curve, start / length, end / length, other, clearance) {
+				return Err(WallError::OpeningTooCloseToJunction);
 			}
 		}
 		Ok(())

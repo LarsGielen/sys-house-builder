@@ -92,8 +92,25 @@ fn update_selection(
 	}
 }
 
+/// The wall owning the nearest mesh surface along a ray, and where the ray meets it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WallHit {
+	pub wall: Wall,
+	/// Graph metres.
+	pub position: Vec3,
+}
+
 /// Finds the wall owning the nearest mesh surface along a graph-space ray.
 fn pick_wall(graph: &WallGraph, mesh: &WallMesh, origin: Vec3, direction: Vec3) -> Option<Wall> {
+	pick_wall_hit(graph, mesh, origin, direction).map(|hit| hit.wall)
+}
+
+pub fn pick_wall_hit(
+	graph: &WallGraph,
+	mesh: &WallMesh,
+	origin: Vec3,
+	direction: Vec3,
+) -> Option<WallHit> {
 	let positions = mesh.positions();
 	let indices = mesh.indices();
 	let (distance, source) = mesh
@@ -112,13 +129,13 @@ fn pick_wall(graph: &WallGraph, mesh: &WallMesh, origin: Vec3, direction: Vec3) 
 		})
 		.min_by(|(a, _), (b, _)| a.total_cmp(b))?;
 
-	match source {
+	let position = origin + direction * distance;
+	let wall = match source {
 		SurfaceSource::Wall(wall) => Some(wall),
 		SurfaceSource::Opening(opening) => Some(graph.opening(opening)?.wall),
-		SurfaceSource::Junction(node) => {
-			nearest_wall_at_junction(graph, node, (origin + direction * distance).truncate())
-		}
-	}
+		SurfaceSource::Junction(node) => nearest_wall_at_junction(graph, node, position.truncate()),
+	}?;
+	Some(WallHit { wall, position })
 }
 
 /// A junction surface belongs to several walls, so it selects the one closest to the hit.

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-	edit::{PreviewState, WallProposal, propose_wall},
+	edit::{PreviewState, Proposal, WallProposal, propose_wall},
 	editor_schedule::EditorSchedulePlugin,
 };
 use bevy::{asset::AssetPlugin, gizmos::GizmoPlugin, transform::TransformPlugin};
@@ -33,7 +33,7 @@ fn preview_wall(app: &mut App, end: Vec2) {
 	};
 	let state = PreviewState {
 		house_revision: house.revision(),
-		proposal,
+		proposal: Proposal::Wall(proposal),
 		outcome: propose_wall(house.graph(), &proposal),
 	};
 	app.world_mut().resource_mut::<EditPreview>().state = Some(state);
