@@ -1,4 +1,5 @@
 use super::*;
+use crate::wall_tool_active::ActiveTool;
 use crate::{
 	ground_pointer::PointerOnGround,
 	snapping::{SnapSource, SnapTarget},
@@ -10,6 +11,7 @@ fn pointer_at(pixels: Vec2) -> GroundPointer {
 			viewport_position: pixels,
 			graph_position: pixels / 100.0,
 		}),
+		..Default::default()
 	}
 }
 
@@ -139,8 +141,9 @@ fn drawing_app() -> App {
 	let mut app = App::new();
 	app.add_plugins((
 		crate::editor_schedule::EditorSchedulePlugin,
-		WallDrawingPlugin,
+		WallToolDrawingPlugin,
 	))
+	.insert_resource(ActiveTool(Tool::DrawWall))
 	.init_resource::<House>()
 	.init_resource::<GroundPointer>()
 	.init_resource::<SnappedPointer>()
@@ -188,7 +191,7 @@ fn unchanged_preview_does_not_trigger_change_detection() {
 			PostUpdate,
 			count_changes
 				.run_if(resource_changed::<EditPreview>)
-				.after(WallDrawingSystems),
+				.after(WallToolDrawingSystems),
 		);
 	app.update();
 	app.update();

@@ -18,8 +18,10 @@ use crate::{
 	house::House,
 	orbit_camera::{OrbitCamera, OrbitCameraPlugin},
 	snapping::{SnappedPointer, SnappingPlugin},
-	wall_drawing::WallDrawingPlugin,
 	wall_render::WallRenderPlugin,
+	wall_tool_active::WallToolActivePlugin,
+	wall_tool_drawing::WallToolDrawingPlugin,
+	wall_tool_selection::WallToolSelectionPlugin,
 };
 
 fn editor_app() -> App {
@@ -46,7 +48,9 @@ fn editor_app() -> App {
 		OrbitCameraPlugin,
 		GroundPointerPlugin,
 		SnappingPlugin,
-		WallDrawingPlugin,
+		WallToolActivePlugin,
+		WallToolDrawingPlugin,
+		WallToolSelectionPlugin,
 		WallRenderPlugin,
 	))
 	.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));

@@ -7,6 +7,7 @@ use crate::{
 	ground_pointer::GroundPointer,
 	house::House,
 	snapping::SnappedPointer,
+	wall_tool_active::{Tool, tool_active},
 };
 
 const DRAG_THRESHOLD_PIXELS: f32 = 6.0;
@@ -16,16 +17,23 @@ const THICKNESS_STEP_METRES: f32 = 0.05;
 const MINIMUM_THICKNESS_METRES: f32 = 0.05;
 
 /// Draws straight walls: press to start, then drag-and-release or click twice to confirm.
-pub struct WallDrawingPlugin;
+pub struct WallToolDrawingPlugin;
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WallDrawingSystems;
-impl Plugin for WallDrawingPlugin {
+pub struct WallToolDrawingSystems;
+impl Plugin for WallToolDrawingPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<WallDrawingSettings>()
 			.init_resource::<WallDraft>()
 			.init_resource::<EditPreview>()
-			.add_systems(PostUpdate, update_wall_drawing.in_set(WallDrawingSystems));
+			.add_systems(
+				PostUpdate,
+				(
+					update_wall_drawing.run_if(tool_active(Tool::DrawWall)),
+					cancel_wall_drawing.run_if(not(tool_active(Tool::DrawWall))),
+				)
+					.in_set(WallToolDrawingSystems),
+			);
 	}
 }
 
@@ -151,6 +159,14 @@ fn update_wall_drawing(
 	}
 }
 
+/// Leaving the tool abandons an unfinished wall instead of resuming it on return.
+fn cancel_wall_drawing(mut draft: ResMut<WallDraft>, mut preview: ResMut<EditPreview>) {
+	draft.set_if_neq(WallDraft::Idle);
+	if preview.state.is_some() {
+		preview.state = None;
+	}
+}
+
 fn advance_draft(
 	draft: WallDraft,
 	mouse: &ButtonInput<MouseButton>,
@@ -265,5 +281,5 @@ fn update_preview(
 }
 
 #[cfg(test)]
-#[path = "tests/wall_drawing.rs"]
+#[path = "tests/wall_tool_drawing.rs"]
 mod tests;

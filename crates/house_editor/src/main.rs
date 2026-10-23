@@ -6,8 +6,10 @@ mod ground_pointer;
 mod house;
 mod orbit_camera;
 mod snapping;
-mod wall_drawing;
 mod wall_render;
+mod wall_tool_active;
+mod wall_tool_drawing;
+mod wall_tool_selection;
 
 use bevy::prelude::*;
 use editor_schedule::EditorSchedulePlugin;
@@ -16,8 +18,10 @@ use ground_pointer::GroundPointerPlugin;
 use house::House;
 use orbit_camera::{OrbitCamera, OrbitCameraPlugin};
 use snapping::SnappingPlugin;
-use wall_drawing::WallDrawingPlugin;
 use wall_render::WallRenderPlugin;
+use wall_tool_active::WallToolActivePlugin;
+use wall_tool_drawing::WallToolDrawingPlugin;
+use wall_tool_selection::WallToolSelectionPlugin;
 
 fn main() {
 	App::new()
@@ -36,7 +40,9 @@ fn main() {
 			WallRenderPlugin,
 			GroundPointerPlugin,
 			SnappingPlugin,
-			WallDrawingPlugin,
+			WallToolActivePlugin,
+			WallToolDrawingPlugin,
+			WallToolSelectionPlugin,
 		))
 		.init_resource::<House>()
 		.add_systems(Startup, setup_scene)

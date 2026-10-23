@@ -7,7 +7,7 @@ for openings without implementing opening placement yet.
 
 ## Tasks
 
-### 3.1 Define editor hit targets
+### 3.1 Define editor hit targets (Done)
 
 Represent a hit as a domain target such as a wall, junction, or eventually an
 opening, plus hit distance and position. Use `SurfaceSource` on generated mesh
@@ -22,7 +22,7 @@ snapshot, so never carry a wall handle across a graph replacement unchecked.
 **Check:** pointing at different wall pieces reports the expected current
 wall, including near junctions and end caps.
 
-### 3.2 Add hover and click selection
+### 3.2 Add hover and click selection (Done)
 
 Raycast only from a pointer owned by the viewport. Highlight the hovered wall
 without committing selection. A left click in the selection tool selects the
@@ -36,7 +36,7 @@ so tools do not each implement their own stale-handle behavior.
 **Check:** hover and selection are visually distinct. UI clicks cannot select
 walls, and empty-space clicks clear the current selection.
 
-### 3.3 Show details and current edit handles
+### 3.3 Show details and current edit handles (Done)
 
 Display selected wall length, height, thickness, and endpoint coordinates.
 Draw visible endpoint and junction handles using `wall_graph` queries. The
@@ -51,7 +51,7 @@ graph-to-world conversion consistent with step 2.
 **Check:** the properties panel and handles match the selected graph piece,
 including a wall that was split by a later insertion.
 
-### 3.4 Invalidate stale selection after edits
+### 3.4 Invalidate stale selection after edits (Done)
 
 After every commit, check whether the selected handle still refers to the
 intended wall. Clear it when insertion, merging, deletion, or rebuild makes it

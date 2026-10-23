@@ -2,8 +2,11 @@ use bevy::{prelude::*, ui::FocusPolicy};
 
 use crate::{
 	edit::{EditPreview, PreviewState},
+	house::House,
 	snapping::{SnapSettings, SnapSource, SnapTarget, SnappedPointer, snapping_disabled},
-	wall_drawing::{StepDirection, WallDrawingSettings},
+	wall_tool_active::{ActivateTool, ActiveTool, Tool},
+	wall_tool_drawing::{StepDirection, WallDrawingSettings},
+	wall_tool_selection::SelectedWall,
 };
 
 pub struct EditorUiPlugin;
@@ -19,7 +22,8 @@ impl Plugin for EditorUiPlugin {
 		app.add_systems(Startup, setup_editor_panel)
 			.add_systems(
 				Update,
-				(step_grid_spacing, step_dimensions).in_set(EditorUiSystems::Settings),
+				(step_grid_spacing, step_dimensions, request_tool)
+					.in_set(EditorUiSystems::Settings),
 			)
 			.add_systems(
 				PostUpdate,
@@ -28,6 +32,8 @@ impl Plugin for EditorUiPlugin {
 					update_dimension_labels.run_if(resource_changed::<WallDrawingSettings>),
 					update_snap_readout,
 					update_wall_readout,
+					update_selection_readout,
+					update_active_tool_label.run_if(resource_changed::<ActiveTool>),
 				)
 					.in_set(EditorUiSystems::Readouts),
 			);
@@ -64,8 +70,93 @@ fn setup_editor_panel(mut commands: Commands) {
 			BackgroundColor(Color::srgb(0.25, 0.25, 0.3)),
 			children![Text::new("Test button")],
 		))
+		.with_child(tool_controls())
 		.with_child(snap_controls())
 		.with_child(wall_drawing_controls());
+}
+
+#[derive(Component)]
+struct ToolButton(Tool);
+
+#[derive(Component)]
+struct SelectionReadout;
+
+#[derive(Component)]
+struct ActiveToolLabel;
+
+fn tool_controls() -> impl Bundle {
+	(
+		Node {
+			flex_direction: FlexDirection::Column,
+			row_gap: Val::Px(8.0),
+			..default()
+		},
+		children![
+			(Text::new(""), ActiveToolLabel),
+			(
+				Node {
+					flex_direction: FlexDirection::Row,
+					column_gap: Val::Px(8.0),
+					..default()
+				},
+				children![
+					(step_button("Select"), ToolButton(Tool::Select)),
+					(step_button("Draw wall"), ToolButton(Tool::DrawWall)),
+				],
+			),
+			(Text::new(""), SelectionReadout),
+		],
+	)
+}
+
+fn update_active_tool_label(
+	active_tool: Res<ActiveTool>,
+	mut label: Single<&mut Text, With<ActiveToolLabel>>,
+) {
+	label.0 = match active_tool.0 {
+		Tool::Select => "Tool: Select",
+		Tool::DrawWall => "Tool: Draw wall",
+	}
+	.to_string();
+}
+
+fn request_tool(
+	buttons: Query<(&Interaction, &ToolButton), Changed<Interaction>>,
+	mut messages: MessageWriter<ActivateTool>,
+) {
+	for (interaction, button) in &buttons {
+		if *interaction == Interaction::Pressed {
+			messages.write(ActivateTool(button.0));
+		}
+	}
+}
+
+fn update_selection_readout(
+	house: Res<House>,
+	selected: Res<SelectedWall>,
+	mut readout: Single<&mut Text, With<SelectionReadout>>,
+) {
+	let graph = house.graph();
+	// Each query fails for a stale handle, so a stale selection shows nothing.
+	let description = selected
+		.0
+		.and_then(|wall| {
+			let dimensions = graph.wall_dimensions(wall)?;
+			let length = graph.wall_length(wall)?;
+			let start = graph.node_position(wall.origin())?;
+			let end = graph.node_position(wall.destination())?;
+			Some(format!(
+				"Selected wall\nLength {length:.3} m\nHeight {:.2} m, thickness {:.2} m\n\
+				 From x {:.3} m, y {:.3} m\nTo x {:.3} m, y {:.3} m",
+				dimensions.height, dimensions.thickness, start.x, start.y, end.x, end.y
+			))
+		})
+		.unwrap_or_default();
+
+	// Writing identical text would still trigger a text layout every frame.
+	if readout.0 != description {
+		readout.0 = description;
+	}
 }
 
 #[derive(Clone, Copy)]

@@ -2,8 +2,9 @@ use bevy::{camera::CameraUpdateSystems, prelude::*, ui::UiSystems};
 
 use crate::{
 	editor_ui::EditorUiSystems, ground_pointer::GroundPointerSystems,
-	orbit_camera::OrbitCameraSystems, snapping::SnappingSystems, wall_drawing::WallDrawingSystems,
-	wall_render::WallRenderSystems,
+	orbit_camera::OrbitCameraSystems, snapping::SnappingSystems, wall_render::WallRenderSystems,
+	wall_tool_active::WallToolActiveSystems, wall_tool_drawing::WallToolDrawingSystems,
+	wall_tool_selection::WallToolSelectionSystems,
 };
 
 /// Composes the plugins' own system sets into the house editor's frame sequence.
@@ -19,9 +20,11 @@ impl Plugin for EditorSchedulePlugin {
 		.configure_sets(
 			PostUpdate,
 			(
+				WallToolActiveSystems,
 				GroundPointerSystems::Pick,
 				SnappingSystems::Pick,
-				WallDrawingSystems,
+				WallToolDrawingSystems,
+				WallToolSelectionSystems::Pick,
 			)
 				.chain()
 				.after(CameraUpdateSystems),
@@ -32,10 +35,11 @@ impl Plugin for EditorSchedulePlugin {
 			(
 				GroundPointerSystems::Presentation,
 				SnappingSystems::Presentation,
+				WallToolSelectionSystems::Presentation,
 				WallRenderSystems,
 				EditorUiSystems::Readouts,
 			)
-				.after(WallDrawingSystems)
+				.after(WallToolSelectionSystems::Pick)
 				.before(UiSystems::Content)
 				.before(TransformSystems::Propagate),
 		);

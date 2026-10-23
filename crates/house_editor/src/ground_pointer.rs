@@ -43,11 +43,14 @@ pub struct PointerOnGround {
 
 /// The pointer's ground hit.
 ///
-/// `None` when the pointer is not over the viewport, the window is unfocused, the
+/// `hit` is `None` when the pointer is not over the viewport, the window is unfocused, the
 /// mouse is owned by a camera gesture, the pointer is over UI, or its ray misses the ground.
 #[derive(Resource, Default)]
 pub struct GroundPointer {
 	pub hit: Option<PointerOnGround>,
+	/// The pointer's ray in Bevy space. Set under the same ownership rules as `hit`, but
+	/// also when the ray misses the ground, so tools can pick things above it.
+	pub ray: Option<Ray3d>,
 }
 
 #[derive(Component)]
@@ -91,18 +94,23 @@ fn update_ground_pointer(
 			.iter()
 			.any(|interaction| *interaction != Interaction::None);
 
-	ground_pointer.hit = viewport_owns_pointer
+	let pointer = viewport_owns_pointer
 		.then(|| {
 			let viewport_position = window.cursor_position()?;
 			let ray = camera
 				.viewport_to_world(&camera_transform, viewport_position)
 				.ok()?;
-			Some(PointerOnGround {
-				viewport_position,
-				graph_position: ground_hit(ray)?,
-			})
+			Some((viewport_position, ray))
 		})
 		.flatten();
+
+	ground_pointer.ray = pointer.map(|(_, ray)| ray);
+	ground_pointer.hit = pointer.and_then(|(viewport_position, ray)| {
+		Some(PointerOnGround {
+			viewport_position,
+			graph_position: ground_hit(ray)?,
+		})
+	});
 }
 
 /// Intersects a Bevy-space ray with the ground and returns the hit in graph metres.
