@@ -6,7 +6,7 @@ use bevy::{
 };
 
 use crate::{
-	editor_ui::EditorUiSystems, ground_pointer::GroundPointerSystems,
+	editor_ui::EditorUiSystems, ground_pointer::GroundPointerSystems, history::HistorySystems,
 	opening_fields::OpeningFieldsSystems, orbit_camera::OrbitCameraSystems,
 	snapping::SnappingSystems, text_fields::TextFieldsSystems, wall_fields::WallFieldsSystems,
 	wall_render::WallRenderSystems, wall_tool_active::WallToolActiveSystems,
@@ -29,6 +29,8 @@ impl Plugin for EditorSchedulePlugin {
 		.configure_sets(
 			PostUpdate,
 			(
+				// Restoring first lets every tool see the restored house and its discarded gestures.
+				HistorySystems,
 				WallToolActiveSystems,
 				GroundPointerSystems::Pick,
 				SnappingSystems::Pick,

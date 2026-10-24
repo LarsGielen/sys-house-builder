@@ -255,3 +255,61 @@ fn duplicating_with_no_room_explains_why_and_changes_nothing() {
 	);
 	assert_eq!(app.world().resource::<SelectedTarget>().opening(), Some(id));
 }
+
+fn undo_steps(app: &mut App) -> usize {
+	let mut house = app.world_mut().resource_mut::<House>();
+	std::iter::from_fn(|| house.undo().then_some(())).count()
+}
+
+#[test]
+fn a_drag_through_many_previews_is_one_undo_step_and_a_cancelled_one_is_none() {
+	let (house, id) = house_with_window(8.0, 3.0);
+	let steps_before = {
+		let mut baseline = house_with_window(8.0, 3.0).0;
+		std::iter::from_fn(|| baseline.undo().then_some(())).count()
+	};
+	let drag = dragging(id, &house);
+	let mut app = edit_app(house, Some(id));
+	app.insert_resource(drag).insert_resource(snapping_off());
+
+	for x in [4.0, 4.5, 5.0, 5.5] {
+		app.insert_resource(pointer_at(Vec2::new(x * 100.0, 100.0), Vec2::new(x, 0.0)));
+		app.update();
+	}
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::Escape);
+	app.update();
+	assert!(app.world().resource::<EditPreview>().state.is_none());
+	assert_eq!(undo_steps(&mut app), steps_before);
+
+	let (house, id) = house_with_window(8.0, 3.0);
+	let drag = dragging(id, &house);
+	let mut app = edit_app(house, Some(id));
+	app.insert_resource(drag).insert_resource(snapping_off());
+	for x in [4.0, 4.5, 5.0] {
+		app.insert_resource(pointer_at(Vec2::new(x * 100.0, 100.0), Vec2::new(x, 0.0)));
+		app.update();
+	}
+	app.insert_resource(released())
+		.insert_resource(pointer_at(Vec2::new(550.0, 100.0), Vec2::new(5.5, 0.0)));
+	app.update();
+	assert_eq!(undo_steps(&mut app), steps_before + 1);
+}
+
+#[test]
+fn undoing_mid_drag_abandons_the_drag() {
+	let (house, id) = house_with_window(8.0, 3.0);
+	let drag = dragging(id, &house);
+	let mut app = edit_app(house, Some(id));
+	app.add_plugins(crate::history::HistoryPlugin)
+		.insert_resource(drag)
+		.insert_resource(snapping_off())
+		.insert_resource(pointer_at(Vec2::new(500.0, 100.0), Vec2::new(5.0, 0.0)));
+	app.world_mut()
+		.write_message(crate::history::HistoryRequest::Undo);
+	app.update();
+
+	assert_eq!(*app.world().resource::<OpeningDrag>(), OpeningDrag::Idle);
+	assert!(app.world().resource::<EditPreview>().state.is_none());
+}

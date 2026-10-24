@@ -15,6 +15,7 @@ use crate::{
 	edit::{OpeningProposal, WallProposal, propose_opening, propose_wall},
 	editor_schedule::EditorSchedulePlugin,
 	ground_pointer::GroundPointerPlugin,
+	history::HistoryPlugin,
 	house::House,
 	opening_fields::OpeningFieldsPlugin,
 	orbit_camera::{OrbitCamera, OrbitCameraPlugin},
@@ -67,6 +68,7 @@ pub(crate) fn editor_app() -> App {
 		WallFieldsPlugin,
 		WallRenderPlugin,
 	))
+	.add_plugins(HistoryPlugin)
 	.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));
 	let mut window = app
 		.world_mut()

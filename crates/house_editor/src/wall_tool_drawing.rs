@@ -5,6 +5,7 @@ use wall_graph::WallDimensions;
 use crate::{
 	edit::{EditNotice, EditPreview, PreviewState, Proposal, WallProposal},
 	ground_pointer::GroundPointer,
+	history::DocumentRestored,
 	house::House,
 	snapping::SnappedPointer,
 	wall_tool_active::{Tool, tool_active},
@@ -27,9 +28,11 @@ impl Plugin for WallToolDrawingPlugin {
 			.init_resource::<WallDraft>()
 			.init_resource::<EditPreview>()
 			.init_resource::<EditNotice>()
+			.add_message::<DocumentRestored>()
 			.add_systems(
 				PostUpdate,
 				(
+					discard_wall_draft_after_restore,
 					update_wall_drawing.run_if(tool_active(Tool::DrawWall)),
 					cancel_wall_drawing.run_if(not(tool_active(Tool::DrawWall))),
 				)
@@ -156,6 +159,16 @@ fn update_wall_drawing(
 		house.commit(candidate);
 		notice.message = None;
 		*draft = WallDraft::Idle;
+	}
+}
+
+/// A wall started on the house before an undo or redo would end on a different house.
+fn discard_wall_draft_after_restore(
+	mut restored: MessageReader<DocumentRestored>,
+	mut draft: ResMut<WallDraft>,
+) {
+	if restored.read().count() > 0 {
+		draft.set_if_neq(WallDraft::Idle);
 	}
 }
 

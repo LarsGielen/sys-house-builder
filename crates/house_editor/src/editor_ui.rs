@@ -1,5 +1,6 @@
 use crate::{
 	edit::{EditNotice, EditPreview, PreviewState, Proposal},
+	history::HistoryRequest,
 	house::House,
 	opening_fields::{opening_field_controls, snap_gap_control},
 	opening_ui,
@@ -16,6 +17,9 @@ use bevy::{
 	ui::{FocusPolicy, RelativeCursorPosition},
 };
 
+const ENABLED_BUTTON_COLOR: Color = Color::srgb(0.25, 0.25, 0.3);
+const DISABLED_BUTTON_COLOR: Color = Color::srgb(0.15, 0.15, 0.17);
+
 pub struct EditorUiPlugin;
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,7 +35,12 @@ impl Plugin for EditorUiPlugin {
 		app.add_systems(Startup, setup_editor_panel)
 			.add_systems(
 				Update,
-				(step_grid_spacing, scroll_editor_panel, request_tool)
+				(
+					step_grid_spacing,
+					scroll_editor_panel,
+					request_tool,
+					request_history,
+				)
 					.in_set(EditorUiSystems::Settings),
 			)
 			.add_systems(
@@ -41,6 +50,7 @@ impl Plugin for EditorUiPlugin {
 					update_snap_readout,
 					update_edit_readout,
 					update_selection_readout,
+					update_history_controls,
 					update_notice_readout,
 					update_panel_sections,
 					update_active_tool_label.run_if(resource_changed::<ActiveTool>),
@@ -98,6 +108,7 @@ fn setup_editor_panel(mut commands: Commands) {
 			},
 			children![
 				tool_controls(),
+				history_controls(),
 				snap_controls(),
 				(Text::new(""), EditReadout),
 				(Text::new(""), NoticeReadout),
@@ -237,6 +248,73 @@ fn tool_controls() -> impl Bundle {
 			(Text::new(""), SelectionReadout),
 		],
 	)
+}
+
+#[derive(Component)]
+struct HistoryButton(HistoryRequest);
+
+#[derive(Component)]
+struct DocumentReadout;
+
+fn history_controls() -> impl Bundle {
+	(
+		Node {
+			flex_direction: FlexDirection::Column,
+			row_gap: Val::Px(8.0),
+			..default()
+		},
+		children![
+			(
+				Node {
+					flex_direction: FlexDirection::Row,
+					column_gap: Val::Px(8.0),
+					..default()
+				},
+				children![
+					(step_button("Undo"), HistoryButton(HistoryRequest::Undo)),
+					(step_button("Redo"), HistoryButton(HistoryRequest::Redo)),
+				],
+			),
+			(Text::new(""), DocumentReadout),
+		],
+	)
+}
+
+fn request_history(
+	buttons: Query<(&Interaction, &HistoryButton), Changed<Interaction>>,
+	mut messages: MessageWriter<HistoryRequest>,
+) {
+	for (interaction, button) in &buttons {
+		if *interaction == Interaction::Pressed {
+			messages.write(button.0);
+		}
+	}
+}
+
+/// Buttons with no history to step through are dimmed; pressing one does nothing.
+fn update_history_controls(
+	house: Res<House>,
+	mut buttons: Query<(&HistoryButton, &mut BackgroundColor)>,
+	mut readout: Single<&mut Text, With<DocumentReadout>>,
+) {
+	for (button, mut background) in &mut buttons {
+		let available = match button.0 {
+			HistoryRequest::Undo => house.can_undo(),
+			HistoryRequest::Redo => house.can_redo(),
+		};
+		let color = if available {
+			ENABLED_BUTTON_COLOR
+		} else {
+			DISABLED_BUTTON_COLOR
+		};
+		background.set_if_neq(BackgroundColor(color));
+	}
+
+	let description = if house.is_modified() { "Modified" } else { "" };
+	// Writing identical text would still trigger a text layout every frame.
+	if readout.0 != description {
+		readout.0 = description.to_string();
+	}
 }
 
 fn update_active_tool_label(
@@ -438,7 +516,7 @@ pub(super) fn step_button(label: &str) -> impl Bundle {
 			padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
 			..default()
 		},
-		BackgroundColor(Color::srgb(0.25, 0.25, 0.3)),
+		BackgroundColor(ENABLED_BUTTON_COLOR),
 		children![Text::new(label)],
 	)
 }

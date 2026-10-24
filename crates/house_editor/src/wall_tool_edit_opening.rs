@@ -7,6 +7,7 @@ use crate::{
 		propose_opening_duplicate, propose_opening_removal,
 	},
 	ground_pointer::GroundPointer,
+	history::DocumentRestored,
 	house::House,
 	opening_area::closest_distance_along_wall,
 	opening_snap::{OpeningSnapOptions, snap_opening},
@@ -32,9 +33,11 @@ impl Plugin for WallToolEditOpeningPlugin {
 			.init_resource::<EditNotice>()
 			.add_message::<DeleteSelectedOpening>()
 			.add_message::<DuplicateSelectedOpening>()
+			.add_message::<DocumentRestored>()
 			.add_systems(
 				PostUpdate,
 				(
+					discard_opening_drag_after_restore,
 					discard_stale_edit_preview,
 					update_opening_drag.run_if(tool_active(Tool::Select)),
 					apply_opening_commands.run_if(tool_active(Tool::Select)),
@@ -65,6 +68,17 @@ enum OpeningDrag {
 		press_position: Vec2,
 		dragged: bool,
 	},
+}
+
+/// A drag remembers the opening's spec from before an undo or redo, which would then be
+/// committed over the restored house.
+fn discard_opening_drag_after_restore(
+	mut restored: MessageReader<DocumentRestored>,
+	mut drag: ResMut<OpeningDrag>,
+) {
+	if restored.read().count() > 0 {
+		drag.set_if_neq(OpeningDrag::Idle);
+	}
 }
 
 #[derive(SystemParam)]

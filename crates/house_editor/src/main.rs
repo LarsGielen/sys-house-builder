@@ -3,6 +3,7 @@ mod edit;
 mod editor_schedule;
 mod editor_ui;
 mod ground_pointer;
+mod history;
 mod house;
 mod opening_area;
 mod opening_category;
@@ -12,6 +13,7 @@ mod opening_ui;
 mod orbit_camera;
 mod snapping;
 mod text_fields;
+mod unsaved_changes;
 mod wall_fields;
 mod wall_render;
 mod wall_tool_active;
@@ -27,6 +29,7 @@ use bevy::prelude::*;
 use editor_schedule::EditorSchedulePlugin;
 use editor_ui::EditorUiPlugin;
 use ground_pointer::GroundPointerPlugin;
+use history::HistoryPlugin;
 use house::House;
 use opening_fields::OpeningFieldsPlugin;
 use orbit_camera::{OrbitCamera, OrbitCameraPlugin};
@@ -55,6 +58,7 @@ fn main() {
 		.add_plugins((
 			EditorSchedulePlugin,
 			EditorUiPlugin,
+			HistoryPlugin,
 			OrbitCameraPlugin,
 			WallRenderPlugin,
 			GroundPointerPlugin,
