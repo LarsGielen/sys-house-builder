@@ -123,7 +123,13 @@ fn update_opening_drag(
 		Some(OpeningEditProposal {
 			opening,
 			spec: options.map_or(raw, |options| {
-				snap_opening(house.graph(), wall, raw, options)
+				snap_opening(
+					house.graph(),
+					wall,
+					house.opening_bounds(wall),
+					raw,
+					options,
+				)
 			}),
 		})
 	});

@@ -1707,18 +1707,15 @@ impl WallGraph {
 				return Err(format!("{wall:?} has invalid geometry"));
 			}
 		}
-		for &node_id in self.nodes.keys() {
-			let mut departures: Vec<_> = self
-				.edges
-				.iter()
-				.filter(|(_, edge)| edge.origin == node_id)
-				.map(|(&id, _)| {
-					(
-						self.half_edge_curve(id).tangent(0.0).as_vec2().to_angle(),
-						id,
-					)
-				})
-				.collect();
+		// Grouped in one pass; scanning every edge per node would make validation quadratic.
+		let mut departures_by_node: HashMap<WallNodeId, Vec<(f32, HalfEdgeId)>> = HashMap::new();
+		for (&id, edge) in &self.edges {
+			departures_by_node.entry(edge.origin).or_default().push((
+				self.half_edge_curve(id).tangent(0.0).as_vec2().to_angle(),
+				id,
+			));
+		}
+		for (node_id, mut departures) in departures_by_node {
 			departures.sort_by(|a, b| a.0.total_cmp(&b.0));
 			for (index, &(angle, edge)) in departures.iter().enumerate() {
 				let previous = departures[(index + departures.len() - 1) % departures.len()];

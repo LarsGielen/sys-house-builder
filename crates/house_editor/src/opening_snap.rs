@@ -1,6 +1,6 @@
-use wall_graph::{MIN_OPENING_GAP, OpeningId, OpeningSpec, Wall, WallGraph};
+use std::ops::RangeInclusive;
 
-use crate::edit::opening_bounds;
+use wall_graph::{MIN_OPENING_GAP, OpeningId, OpeningSpec, Wall, WallGraph};
 
 // How close along the wall a snap candidate must be to take the opening's centre.
 const SNAP_RADIUS_METRES: f64 = 0.15;
@@ -27,15 +27,16 @@ const GRID_PRIORITY: u8 = 1;
 /// Snaps to nearby wall ends, opening centres or sides, and free-span centres before
 /// considering the grid. Structural candidates share a priority; the closest one wins. Everything is
 /// measured along the host wall's path and stays within the stretch where junctions allow an
-/// opening.
+/// opening. `bounds` is [`crate::edit::opening_bounds`] for `wall`, which the caller supplies
+/// because it is costly to compute.
 pub fn snap_opening(
 	graph: &WallGraph,
 	wall: Wall,
+	bounds: Option<RangeInclusive<f64>>,
 	spec: OpeningSpec,
 	options: OpeningSnapOptions,
 ) -> OpeningSpec {
-	let (Some(length), Some(bounds)) = (graph.wall_length(wall), opening_bounds(graph, wall))
-	else {
+	let (Some(length), Some(bounds)) = (graph.wall_length(wall), bounds) else {
 		return spec;
 	};
 	let width = f64::from(spec.width);

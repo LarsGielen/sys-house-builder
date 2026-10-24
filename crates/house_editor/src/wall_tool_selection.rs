@@ -142,22 +142,29 @@ fn update_selection(
 	house: Res<House>,
 	mut hovered_target: ResMut<HoveredTarget>,
 	mut selected: ResMut<SelectedTarget>,
+	mut last_picked: Local<Option<(Option<Ray3d>, u64)>>,
 ) {
 	if active_tool.0 != Tool::Select {
 		hovered_target.set_if_neq(HoveredTarget(None));
 		selected.set_if_neq(SelectedTarget(None));
+		*last_picked = None;
 		return;
 	}
 
-	let hovered = input.ground_pointer.ray.and_then(|ray| {
-		pick_target(
-			house.graph(),
-			house.mesh(),
-			bevy_to_graph(ray.origin),
-			bevy_to_graph(*ray.direction),
-		)
-	});
-	hovered_target.set_if_neq(HoveredTarget(hovered));
+	// Picking tests every triangle, so it only reruns when the ray or the house changed.
+	let pick_inputs = (input.ground_pointer.ray, house.revision());
+	if *last_picked != Some(pick_inputs) {
+		let hovered = pick_inputs.0.and_then(|ray| {
+			pick_target(
+				house.graph(),
+				house.mesh(),
+				bevy_to_graph(ray.origin),
+				bevy_to_graph(*ray.direction),
+			)
+		});
+		hovered_target.set_if_neq(HoveredTarget(hovered));
+		*last_picked = Some(pick_inputs);
+	}
 
 	// Escape wins over a click in the same frame, as cancelling does in the drawing tool.
 	// While typing, Escape belongs to the text field.
@@ -167,7 +174,7 @@ fn update_selection(
 	}
 	// A ray exists only when the viewport owns the pointer, so UI clicks never get here.
 	if input.mouse.just_pressed(MouseButton::Left) && input.ground_pointer.ray.is_some() {
-		selected.set_if_neq(SelectedTarget(hovered));
+		selected.set_if_neq(SelectedTarget(hovered_target.0));
 	}
 }
 

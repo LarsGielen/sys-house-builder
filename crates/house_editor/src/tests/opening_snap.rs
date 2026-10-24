@@ -44,7 +44,14 @@ fn snapped_with(
 		gap,
 		moving,
 	};
-	snap_opening(graph, wall, spec(center_distance), options).center_distance
+	snap_opening(
+		graph,
+		wall,
+		crate::edit::opening_bounds(graph, wall),
+		spec(center_distance),
+		options,
+	)
+	.center_distance
 }
 
 #[test]

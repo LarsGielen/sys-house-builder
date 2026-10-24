@@ -109,7 +109,13 @@ fn update_opening_placement(
 				moving: None,
 			};
 			OpeningProposal {
-				spec: snap_opening(house.graph(), proposal.wall, proposal.spec, options),
+				spec: snap_opening(
+					house.graph(),
+					proposal.wall,
+					house.opening_bounds(proposal.wall),
+					proposal.spec,
+					options,
+				),
 				..proposal
 			}
 		});
