@@ -1,12 +1,19 @@
-use bevy::{prelude::*, ui::FocusPolicy};
-
 use crate::{
-	edit::{EditError, EditPreview, OpeningProposal, PreviewState, Proposal, WallProposal},
+	edit::{EditNotice, EditPreview, PreviewState, Proposal},
 	house::House,
+	opening_fields::{opening_field_controls, snap_gap_control},
+	opening_ui,
 	snapping::{SnapSettings, SnapSource, SnapTarget, SnappedPointer, snapping_disabled},
+	wall_fields::wall_field_controls,
 	wall_tool_active::{ActivateTool, ActiveTool, Tool},
-	wall_tool_drawing::{StepDirection, WallDrawingSettings},
-	wall_tool_selection::SelectedWall,
+	wall_tool_selection::{SelectedTarget, SelectionTarget},
+	wall_ui,
+};
+use bevy::{
+	input::mouse::{AccumulatedMouseScroll, MouseScrollUnit},
+	input_focus::InputFocus,
+	prelude::*,
+	ui::{FocusPolicy, RelativeCursorPosition},
 };
 
 pub struct EditorUiPlugin;
@@ -19,20 +26,23 @@ pub enum EditorUiSystems {
 
 impl Plugin for EditorUiPlugin {
 	fn build(&self, app: &mut App) {
+		crate::opening_ui::register(app);
+		crate::wall_ui::register(app);
 		app.add_systems(Startup, setup_editor_panel)
 			.add_systems(
 				Update,
-				(step_grid_spacing, step_dimensions, request_tool)
+				(step_grid_spacing, scroll_editor_panel, request_tool)
 					.in_set(EditorUiSystems::Settings),
 			)
 			.add_systems(
 				PostUpdate,
 				(
 					update_grid_spacing_label.run_if(resource_changed::<SnapSettings>),
-					update_dimension_labels.run_if(resource_changed::<WallDrawingSettings>),
 					update_snap_readout,
-					update_wall_readout,
+					update_edit_readout,
 					update_selection_readout,
+					update_notice_readout,
+					update_panel_sections,
 					update_active_tool_label.run_if(resource_changed::<ActiveTool>),
 				)
 					.in_set(EditorUiSystems::Readouts),
@@ -40,39 +50,155 @@ impl Plugin for EditorUiPlugin {
 	}
 }
 
+#[derive(Component)]
+struct EditorPanel;
+
+#[derive(Component, Clone, Copy)]
+enum PanelSection {
+	WallDrawing,
+	OpeningPlacement,
+	SelectedOpening,
+	SelectedWall,
+}
+
+#[derive(Component)]
+struct EditReadout;
+
+#[derive(Component)]
+struct NoticeReadout;
+
 fn setup_editor_panel(mut commands: Commands) {
-	commands
-		.spawn((
-			Name::new("editor-panel"),
+	commands.spawn((
+		Name::new("editor-panel"),
+		EditorPanel,
+		Node {
+			position_type: PositionType::Absolute,
+			left: Val::Px(0.0),
+			top: Val::Px(0.0),
+			width: Val::Px(240.0),
+			max_width: Val::Percent(100.0),
+			height: Val::Percent(100.0),
+			padding: UiRect::all(Val::Px(12.0)),
+			overflow: Overflow::scroll_y(),
+			..default()
+		},
+		ScrollPosition::default(),
+		RelativeCursorPosition::default(),
+		BackgroundColor(Color::srgba(0.1, 0.1, 0.12, 0.9)),
+		// Interaction makes the panel block viewport picking, including its blank space.
+		Interaction::default(),
+		FocusPolicy::Block,
+		children![(
 			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Px(0.0),
-				top: Val::Px(0.0),
-				width: Val::Px(240.0),
-				height: Val::Percent(100.0),
-				padding: UiRect::all(Val::Px(12.0)),
+				width: Val::Percent(100.0),
 				flex_direction: FlexDirection::Column,
+				flex_shrink: 0.0,
 				row_gap: Val::Px(12.0),
 				..default()
 			},
-			BackgroundColor(Color::srgba(0.1, 0.1, 0.12, 0.9)),
-			// Without `Interaction` the node is never hover-tested, and `Block` stops
-			// the pointer from also counting as over anything underneath.
-			Interaction::default(),
-			FocusPolicy::Block,
-		))
-		.with_child((
-			Button,
-			Node {
-				padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-				..default()
-			},
-			BackgroundColor(Color::srgb(0.25, 0.25, 0.3)),
-			children![Text::new("Test button")],
-		))
-		.with_child(tool_controls())
-		.with_child(snap_controls())
-		.with_child(wall_drawing_controls());
+			children![
+				tool_controls(),
+				snap_controls(),
+				(Text::new(""), EditReadout),
+				(Text::new(""), NoticeReadout),
+				section(PanelSection::WallDrawing, wall_ui::wall_drawing_controls()),
+				section(
+					PanelSection::OpeningPlacement,
+					opening_ui::opening_controls()
+				),
+				section(
+					PanelSection::SelectedOpening,
+					(
+						Node {
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(8.0),
+							..default()
+						},
+						children![
+							opening_ui::opening_edit_controls(),
+							opening_field_controls()
+						],
+					)
+				),
+				section(
+					PanelSection::SelectedWall,
+					(
+						Node {
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(8.0),
+							..default()
+						},
+						children![wall_ui::wall_edit_controls(), wall_field_controls()],
+					)
+				),
+			],
+		)],
+	));
+}
+
+fn section(kind: PanelSection, contents: impl Bundle) -> impl Bundle {
+	(
+		kind,
+		Node {
+			display: Display::None,
+			flex_shrink: 0.0,
+			..default()
+		},
+		children![contents],
+	)
+}
+
+fn update_panel_sections(
+	tool: Res<ActiveTool>,
+	selected: Res<SelectedTarget>,
+	mut sections: Query<(Entity, &PanelSection, &mut Node)>,
+	parents: Query<&ChildOf>,
+	focus: Option<ResMut<InputFocus>>,
+) {
+	let mut focus = focus;
+	for (entity, section, mut node) in &mut sections {
+		let show = match section {
+			PanelSection::WallDrawing => tool.0 == Tool::DrawWall,
+			PanelSection::OpeningPlacement => tool.0 == Tool::PlaceOpening,
+			PanelSection::SelectedOpening => tool.0 == Tool::Select && selected.opening().is_some(),
+			PanelSection::SelectedWall => tool.0 == Tool::Select && selected.wall().is_some(),
+		};
+		let display = if show { Display::Flex } else { Display::None };
+		if node.display != display {
+			node.display = display;
+		}
+		if !show && let Some(focus) = focus.as_mut() {
+			let mut ancestor = focus.get();
+			while let Some(current) = ancestor {
+				if current == entity {
+					focus.clear();
+					break;
+				}
+				ancestor = parents.get(current).ok().map(ChildOf::parent);
+			}
+		}
+	}
+}
+
+fn scroll_editor_panel(
+	scroll: Res<AccumulatedMouseScroll>,
+	mut panel: Single<
+		(&RelativeCursorPosition, &ComputedNode, &mut ScrollPosition),
+		With<EditorPanel>,
+	>,
+) {
+	let (cursor, computed, position) = &mut *panel;
+	if !cursor.cursor_over() {
+		return;
+	}
+	let delta = match scroll.unit {
+		MouseScrollUnit::Line => scroll.delta.y * 40.0,
+		MouseScrollUnit::Pixel => scroll.delta.y,
+	};
+	let maximum = ((computed.content_size().y - computed.size().y)
+		* computed.inverse_scale_factor())
+	.max(0.0);
+	position.y = (position.y - delta).clamp(0.0, maximum);
 }
 
 #[derive(Component)]
@@ -96,6 +222,8 @@ fn tool_controls() -> impl Bundle {
 			(
 				Node {
 					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					row_gap: Val::Px(8.0),
 					column_gap: Val::Px(8.0),
 					..default()
 				},
@@ -103,6 +231,7 @@ fn tool_controls() -> impl Bundle {
 					(step_button("Select"), ToolButton(Tool::Select)),
 					(step_button("Draw wall"), ToolButton(Tool::DrawWall)),
 					(step_button("Opening"), ToolButton(Tool::PlaceOpening)),
+					(step_button("Delete"), ToolButton(Tool::Delete)),
 				],
 			),
 			(Text::new(""), SelectionReadout),
@@ -118,6 +247,7 @@ fn update_active_tool_label(
 		Tool::Select => "Tool: Select",
 		Tool::DrawWall => "Tool: Draw wall",
 		Tool::PlaceOpening => "Tool: Place opening",
+		Tool::Delete => "Tool: Delete",
 	}
 	.to_string();
 }
@@ -135,23 +265,14 @@ fn request_tool(
 
 fn update_selection_readout(
 	house: Res<House>,
-	selected: Res<SelectedWall>,
+	selected: Res<SelectedTarget>,
 	mut readout: Single<&mut Text, With<SelectionReadout>>,
 ) {
-	let graph = house.graph();
-	// Each query fails for a stale handle, so a stale selection shows nothing.
 	let description = selected
 		.0
-		.and_then(|wall| {
-			let dimensions = graph.wall_dimensions(wall)?;
-			let length = graph.wall_length(wall)?;
-			let start = graph.node_position(wall.origin())?;
-			let end = graph.node_position(wall.destination())?;
-			Some(format!(
-				"Selected wall\nLength {length:.3} m\nHeight {:.2} m, thickness {:.2} m\n\
-				 From x {:.3} m, y {:.3} m\nTo x {:.3} m, y {:.3} m",
-				dimensions.height, dimensions.thickness, start.x, start.y, end.x, end.y
-			))
+		.and_then(|target| match target {
+			SelectionTarget::Wall(wall) => wall_ui::describe_wall(house.graph(), wall),
+			SelectionTarget::Opening(opening) => opening_ui::describe_opening(&house, opening),
 		})
 		.unwrap_or_default();
 
@@ -161,92 +282,11 @@ fn update_selection_readout(
 	}
 }
 
-#[derive(Clone, Copy)]
-enum DimensionField {
-	Height,
-	Thickness,
-}
-
-#[derive(Component)]
-struct DimensionStep {
-	field: DimensionField,
-	direction: StepDirection,
-}
-
-#[derive(Component)]
-struct DimensionLabel(DimensionField);
-
-#[derive(Component)]
-struct WallReadout;
-
-fn wall_drawing_controls() -> impl Bundle {
-	(
-		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
-			..default()
-		},
-		children![
-			Text::new("Wall drawing: click twice, or drag. Esc cancels."),
-			dimension_row(DimensionField::Height),
-			dimension_row(DimensionField::Thickness),
-			(Text::new(""), WallReadout),
-		],
-	)
-}
-
-fn dimension_row(field: DimensionField) -> impl Bundle {
-	(
-		Node {
-			flex_direction: FlexDirection::Row,
-			align_items: AlignItems::Center,
-			column_gap: Val::Px(8.0),
-			..default()
-		},
-		children![
-			(Text::new(""), DimensionLabel(field)),
-			dimension_button("-", field, StepDirection::Decrease),
-			dimension_button("+", field, StepDirection::Increase),
-		],
-	)
-}
-
-fn dimension_button(label: &str, field: DimensionField, direction: StepDirection) -> impl Bundle {
-	(step_button(label), DimensionStep { field, direction })
-}
-
-fn step_dimensions(
-	mut settings: ResMut<WallDrawingSettings>,
-	buttons: Query<(&Interaction, &DimensionStep), Changed<Interaction>>,
-) {
-	for (interaction, step) in &buttons {
-		if *interaction != Interaction::Pressed {
-			continue;
-		}
-		match step.field {
-			DimensionField::Height => settings.step_height(step.direction),
-			DimensionField::Thickness => settings.step_thickness(step.direction),
-		}
-	}
-}
-
-fn update_dimension_labels(
-	settings: Res<WallDrawingSettings>,
-	mut labels: Query<(&DimensionLabel, &mut Text)>,
-) {
-	for (label, mut text) in &mut labels {
-		text.0 = match label.0 {
-			DimensionField::Height => format!("Height: {:.2} m", settings.dimensions().height),
-			DimensionField::Thickness => {
-				format!("Thickness: {:.2} m", settings.dimensions().thickness)
-			}
-		};
-	}
-}
-
-fn update_wall_readout(
+fn update_edit_readout(
 	preview: Res<EditPreview>,
-	mut readout: Single<&mut Text, With<WallReadout>>,
+	house: Res<House>,
+	active_tool: Res<ActiveTool>,
+	mut readout: Single<&mut Text, With<EditReadout>>,
 ) {
 	let description = match &preview.state {
 		None => String::new(),
@@ -254,12 +294,32 @@ fn update_wall_readout(
 			proposal: Proposal::Wall(proposal),
 			outcome,
 			..
-		}) => describe_wall_proposal(proposal, outcome.as_ref().err()),
+		}) => wall_ui::describe_wall_proposal(proposal, outcome.as_ref().err()),
 		Some(PreviewState {
 			proposal: Proposal::Opening(proposal),
 			outcome,
 			..
-		}) => describe_opening_proposal(proposal, outcome.as_ref().err()),
+		}) => opening_ui::describe_opening_proposal(proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::OpeningEdit(proposal),
+			outcome,
+			..
+		}) => opening_ui::describe_opening_edit(&house, proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::WallDimensions(proposal),
+			outcome,
+			..
+		}) => wall_ui::describe_wall_dimensions(proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::WallRemoval(wall),
+			outcome,
+			..
+		}) => wall_ui::describe_wall_removal(&house, *wall, outcome.as_ref(), active_tool.0),
+		Some(PreviewState {
+			proposal: Proposal::OpeningRemoval(opening),
+			outcome,
+			..
+		}) => opening_ui::describe_opening_removal(&house, *opening, outcome.as_ref().err()),
 	};
 
 	// Writing identical text would still trigger a text layout every frame.
@@ -268,32 +328,14 @@ fn update_wall_readout(
 	}
 }
 
-fn describe_wall_proposal(proposal: &WallProposal, error: Option<&EditError>) -> String {
-	let length = proposal.start.distance(proposal.end);
-	match error {
-		None => format!(
-			"Length {length:.3} m\nHeight {:.2} m, thickness {:.2} m",
-			proposal.dimensions.height, proposal.dimensions.thickness
-		),
-		Some(error) => format!("Invalid wall ({length:.3} m): {error}"),
-	}
-}
-
-fn describe_opening_proposal(proposal: &OpeningProposal, error: Option<&EditError>) -> String {
-	let spec = proposal.spec;
-	let size = format!(
-		"{:.2} m wide, {:.2} m high, bottom {:.2} m",
-		spec.width, spec.height, spec.bottom
-	);
-	match error {
-		None => format!(
-			"Opening {size}\n{:.3} m along the wall",
-			spec.center_distance
-		),
-		Some(error) => format!(
-			"Invalid opening at {:.3} m along the wall\n{size}: {error}",
-			spec.center_distance
-		),
+fn update_notice_readout(
+	notice: Res<EditNotice>,
+	mut readout: Single<&mut Text, With<NoticeReadout>>,
+) {
+	let description = notice.message.clone().unwrap_or_default();
+	// Writing identical text would still trigger a text layout every frame.
+	if readout.0 != description {
+		readout.0 = description;
 	}
 }
 
@@ -315,9 +357,12 @@ fn snap_controls() -> impl Bundle {
 		},
 		children![
 			Text::new("Snap priority: junction, wall, grid. Hold Shift to disable."),
+			snap_gap_control(),
 			(
 				Node {
 					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					row_gap: Val::Px(8.0),
 					align_items: AlignItems::Center,
 					column_gap: Val::Px(8.0),
 					..default()
@@ -386,7 +431,7 @@ fn update_snap_readout(
 	}
 }
 
-fn step_button(label: &str) -> impl Bundle {
+pub(super) fn step_button(label: &str) -> impl Bundle {
 	(
 		Button,
 		Node {
@@ -397,3 +442,7 @@ fn step_button(label: &str) -> impl Bundle {
 		children![Text::new(label)],
 	)
 }
+
+#[cfg(test)]
+#[path = "tests/editor_ui.rs"]
+mod tests;

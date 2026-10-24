@@ -7,4 +7,4 @@ mod opening;
 pub use graph::{
 	Wall, WallCurve, WallDimensions, WallError, WallGraph, WallGraphIdMap, WallNodeId,
 };
-pub use opening::{Opening, OpeningId, OpeningSpec};
+pub use opening::{MIN_OPENING_GAP, Opening, OpeningId, OpeningSpec};

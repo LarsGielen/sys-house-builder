@@ -76,6 +76,9 @@ impl SnapTarget {
 #[derive(Resource)]
 pub struct SnapSettings {
 	grid_spacing_index: usize,
+	/// Gap kept between an opening and the neighbour it snaps beside, before the graph's
+	/// minimum is applied.
+	opening_gap: f32,
 	acquire_radius_pixels: f32,
 	release_radius_pixels: f32,
 }
@@ -84,15 +87,39 @@ impl Default for SnapSettings {
 	fn default() -> Self {
 		Self {
 			grid_spacing_index: DEFAULT_GRID_SPACING_INDEX,
+			opening_gap: 0.0,
 			acquire_radius_pixels: SNAP_ACQUIRE_RADIUS_PIXELS,
 			release_radius_pixels: SNAP_RELEASE_RADIUS_PIXELS,
 		}
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidOpeningGap;
+
+impl std::fmt::Display for InvalidOpeningGap {
+	fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		formatter.write_str("Opening gap must be finite, nonnegative, and representable in metres")
+	}
+}
+
+impl std::error::Error for InvalidOpeningGap {}
+
 impl SnapSettings {
 	pub fn grid_spacing(&self) -> f32 {
 		GRID_SPACINGS_METRES[self.grid_spacing_index]
+	}
+
+	pub fn opening_gap(&self) -> f32 {
+		self.opening_gap
+	}
+
+	pub fn set_opening_gap(&mut self, gap: f32) -> Result<(), InvalidOpeningGap> {
+		if !gap.is_finite() || gap < 0.0 {
+			return Err(InvalidOpeningGap);
+		}
+		self.opening_gap = gap;
+		Ok(())
 	}
 
 	pub fn step_grid_spacing(&mut self, step: isize) {

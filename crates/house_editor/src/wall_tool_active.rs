@@ -7,6 +7,7 @@ pub enum Tool {
 	Select,
 	DrawWall,
 	PlaceOpening,
+	Delete,
 }
 
 /// Owns which tool is active. Tools read it; only [`ActivateTool`] changes it.

@@ -6,7 +6,7 @@ validation, selection, and preview paths for openings and dimension edits.
 
 ## Tasks
 
-### 4.1 Place an opening on a chosen host wall
+### 4.1 Place an opening on a chosen host wall (Done)
 
 Use wall picking to choose a host. Derive the opening's center distance along
 that wall, then preview width, height, bottom elevation, and wall position in
@@ -20,7 +20,7 @@ clearance near a resolved junction.
 **Check:** an opening cuts the expected hole, follows its host, and an invalid
 size or position never changes the house.
 
-### 4.2 Keep door/window category in the editor document
+### 4.2 Keep door/window category in the editor document (Done)
 
 Offer door and window as categories for the same geometric opening. Store the
 category with a stable `OpeningId` in editor-owned, engine-independent data.
@@ -34,7 +34,7 @@ in the same commit as the graph change so they cannot disagree.
 **Check:** two identical holes can retain different categories through further
 wall insertions that split or merge their hosts.
 
-### 4.3 Pick and select across the empty hole
+### 4.3 Pick and select across the empty hole (Done)
 
 Add an editor-only hit area spanning each opening. Mesh tags cover jambs,
 heads, and sills but no triangles at the center of the hole. Opening selection
@@ -63,7 +63,7 @@ identity; a move should retain the existing opening identity.
 **Check:** a too-wide, overlapping, or junction-crowding edit shows a reason
 and leaves both geometry and category unchanged.
 
-### 4.5 Edit wall dimensions and handle wall deletion
+### 4.5 Edit wall dimensions and handle wall deletion (Done)
 
 Expose exact wall height and thickness with `set_wall_dimensions`, previewing
 the new mesh before commit. Let the user delete a selected wall, but show its

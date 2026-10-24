@@ -266,3 +266,13 @@ fn different_arcs_with_the_same_endpoints_have_a_stable_order() {
 		stable_source_order(&graph, SnapSource::Wall(second), SnapSource::Wall(first))
 	);
 }
+
+#[test]
+fn invalid_opening_gap_settings_are_rejected_without_mutation() {
+	let mut settings = SnapSettings::default();
+	settings.set_opening_gap(0.15).unwrap();
+	for gap in [-1.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+		assert_eq!(settings.set_opening_gap(gap), Err(InvalidOpeningGap));
+		assert_eq!(settings.opening_gap(), 0.15);
+	}
+}

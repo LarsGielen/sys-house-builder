@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use wall_graph::WallDimensions;
 
 use crate::{
-	edit::{EditPreview, PreviewState, Proposal, WallProposal, propose_wall},
+	edit::{EditNotice, EditPreview, PreviewState, Proposal, WallProposal},
 	ground_pointer::GroundPointer,
 	house::House,
 	snapping::SnappedPointer,
@@ -26,6 +26,7 @@ impl Plugin for WallToolDrawingPlugin {
 		app.init_resource::<WallDrawingSettings>()
 			.init_resource::<WallDraft>()
 			.init_resource::<EditPreview>()
+			.init_resource::<EditNotice>()
 			.add_systems(
 				PostUpdate,
 				(
@@ -119,6 +120,7 @@ fn update_wall_drawing(
 	input: DrawingInput,
 	settings: Res<WallDrawingSettings>,
 	mut house: ResMut<House>,
+	mut notice: ResMut<EditNotice>,
 	mut draft: ResMut<WallDraft>,
 	mut preview: ResMut<EditPreview>,
 ) {
@@ -147,14 +149,12 @@ fn update_wall_drawing(
 		preview.reborrow(),
 	);
 
-	if action == DraftAction::Confirm && preview.valid_candidate().is_some() {
-		if let Some(PreviewState {
-			outcome: Ok(candidate),
-			..
-		}) = preview.state.take()
-		{
-			house.commit(candidate);
-		}
+	if action == DraftAction::Confirm
+		&& let Some(Proposal::Wall(proposal)) = preview.state.as_ref().map(|state| state.proposal)
+		&& let Some(candidate) = preview.take_valid(Proposal::Wall(proposal), house.revision())
+	{
+		house.commit(candidate);
+		notice.message = None;
 		*draft = WallDraft::Idle;
 	}
 }
@@ -271,17 +271,12 @@ fn update_preview(
 			..*previous
 		}
 	};
-	let up_to_date = preview.state.as_ref().is_some_and(|state| {
-		state.proposal == Proposal::Wall(proposal) && state.house_revision == house.revision()
-	});
-	if up_to_date {
-		return;
-	}
-	preview.state = Some(PreviewState {
-		house_revision: house.revision(),
-		proposal: Proposal::Wall(proposal),
-		outcome: propose_wall(house.graph(), &proposal),
-	});
+	EditPreview::update(
+		preview,
+		Proposal::Wall(proposal),
+		house.revision(),
+		house.committed(),
+	);
 }
 
 #[cfg(test)]

@@ -4,24 +4,41 @@ mod editor_schedule;
 mod editor_ui;
 mod ground_pointer;
 mod house;
+mod opening_area;
+mod opening_category;
+mod opening_fields;
+mod opening_snap;
+mod opening_ui;
 mod orbit_camera;
 mod snapping;
+mod text_fields;
+mod wall_fields;
 mod wall_render;
 mod wall_tool_active;
+mod wall_tool_delete;
 mod wall_tool_drawing;
+mod wall_tool_edit_opening;
+mod wall_tool_edit_wall;
 mod wall_tool_opening;
 mod wall_tool_selection;
+mod wall_ui;
 
 use bevy::prelude::*;
 use editor_schedule::EditorSchedulePlugin;
 use editor_ui::EditorUiPlugin;
 use ground_pointer::GroundPointerPlugin;
 use house::House;
+use opening_fields::OpeningFieldsPlugin;
 use orbit_camera::{OrbitCamera, OrbitCameraPlugin};
 use snapping::SnappingPlugin;
+use text_fields::TextFieldsPlugin;
+use wall_fields::WallFieldsPlugin;
 use wall_render::WallRenderPlugin;
 use wall_tool_active::WallToolActivePlugin;
+use wall_tool_delete::WallToolDeletePlugin;
 use wall_tool_drawing::WallToolDrawingPlugin;
+use wall_tool_edit_opening::WallToolEditOpeningPlugin;
+use wall_tool_edit_wall::WallToolEditWallPlugin;
 use wall_tool_opening::WallToolOpeningPlugin;
 use wall_tool_selection::WallToolSelectionPlugin;
 
@@ -45,7 +62,15 @@ fn main() {
 			WallToolActivePlugin,
 			WallToolDrawingPlugin,
 			WallToolOpeningPlugin,
+			WallToolDeletePlugin,
 			WallToolSelectionPlugin,
+		))
+		.add_plugins((
+			WallToolEditOpeningPlugin,
+			WallToolEditWallPlugin,
+			TextFieldsPlugin,
+			OpeningFieldsPlugin,
+			WallFieldsPlugin,
 		))
 		.init_resource::<House>()
 		.add_systems(Startup, setup_scene)

@@ -12,6 +12,10 @@ pub struct House {
 }
 
 impl House {
+	pub fn committed(&self) -> &EditCandidate {
+		&self.committed
+	}
+
 	pub fn graph(&self) -> &WallGraph {
 		self.committed.graph()
 	}

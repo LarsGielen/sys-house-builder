@@ -3,19 +3,24 @@ use bevy::{
 	mesh::{Indices, PrimitiveTopology},
 	prelude::*,
 };
-use wall_graph::WallGraph;
-use wall_mesh::WallMesh;
+use wall_graph::{OpeningSpec, Wall, WallGraph};
+use wall_mesh::{SurfaceSource, WallMesh};
 
 use crate::{
 	coordinates::graph_to_bevy,
-	edit::{EditPreview, OpeningProposal, Proposal, WallProposal},
+	edit::{EditPreview, Proposal, WallProposal},
 	house::House,
+	opening_area::{OpeningArea, opening_area},
 };
 
 // Lifts the line off the ground so it is not hidden by the floor.
 const PREVIEW_LINE_HEIGHT_METRES: f32 = 0.02;
 // Keeps the opening outline off the wall faces it is drawn around.
 const OUTLINE_LIFT_METRES: f32 = 0.01;
+const SAMPLE_DEVIATION_METRES: f32 = 0.01;
+// Keeps the deletion tint in front of the surfaces it covers.
+const REMOVAL_LIFT_METRES: f32 = 0.003;
+const REMOVAL_COLOR: Color = Color::srgb(0.9, 0.2, 0.2);
 
 /// Displays the committed walls and the preview of the edit being proposed.
 pub struct WallRenderPlugin;
@@ -30,6 +35,7 @@ impl Plugin for WallRenderPlugin {
 			(
 				rebuild_wall_entities.run_if(resource_changed::<House>),
 				rebuild_preview_entity.run_if(resource_changed::<EditPreview>),
+				rebuild_removal_entity.run_if(resource_changed::<EditPreview>),
 				hide_committed_walls_while_previewing,
 				draw_preview_gizmos,
 			)
@@ -47,16 +53,26 @@ struct WallDisplay;
 #[derive(Component)]
 struct PreviewDisplay;
 
+/// Marks the entity that tints the surfaces a previewed deletion would remove.
+#[derive(Component)]
+struct RemovalDisplay;
+
 #[derive(Resource)]
 struct WallMaterials {
 	committed: Handle<StandardMaterial>,
 	preview: Handle<StandardMaterial>,
+	removal: Handle<StandardMaterial>,
 }
 
 fn setup_wall_materials(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
 	commands.insert_resource(WallMaterials {
 		committed: materials.add(Color::srgb(0.85, 0.82, 0.78)),
 		preview: materials.add(Color::srgb(0.55, 0.8, 0.95)),
+		removal: materials.add(StandardMaterial {
+			base_color: REMOVAL_COLOR.with_alpha(0.8),
+			alpha_mode: AlphaMode::Blend,
+			..default()
+		}),
 	});
 }
 
@@ -94,9 +110,13 @@ fn rebuild_preview_entity(
 		commands.entity(entity).despawn();
 	}
 
-	let Some(candidate) = preview.valid_candidate() else {
+	let Some(candidate) = preview.candidate_to_display() else {
 		return;
 	};
+	// A mesh with no vertices has nothing to show and upsets the renderer's mesh allocator.
+	if candidate.mesh().is_empty() {
+		return;
+	}
 	commands.spawn((
 		Name::new("wall-preview"),
 		PreviewDisplay,
@@ -105,13 +125,93 @@ fn rebuild_preview_entity(
 	));
 }
 
+/// Tints the surfaces a previewed deletion would remove, drawn just above the committed walls.
+fn rebuild_removal_entity(
+	mut commands: Commands,
+	preview: Res<EditPreview>,
+	house: Res<House>,
+	wall_materials: Res<WallMaterials>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	old_removals: Query<Entity, With<RemovalDisplay>>,
+) {
+	for entity in &old_removals {
+		commands.entity(entity).despawn();
+	}
+
+	let Some(state) = preview.state.as_ref() else {
+		return;
+	};
+	let sources = removed_sources(house.graph(), &state.proposal);
+	if sources.is_empty() {
+		return;
+	}
+	let mesh = tinted_mesh(house.mesh(), &sources);
+	if mesh.indices().is_none_or(|indices| indices.is_empty()) {
+		return;
+	}
+	commands.spawn((
+		Name::new("removal-preview"),
+		RemovalDisplay,
+		Mesh3d(meshes.add(mesh)),
+		MeshMaterial3d(wall_materials.removal.clone()),
+	));
+}
+
+/// Everything in the committed mesh that a deletion removes: the wall or opening itself, and
+/// the openings of a deleted wall.
+fn removed_sources(graph: &WallGraph, proposal: &Proposal) -> Vec<SurfaceSource> {
+	match proposal {
+		Proposal::WallRemoval(wall) => std::iter::once(SurfaceSource::Wall(*wall))
+			.chain(
+				graph
+					.openings()
+					.filter(|(_, opening)| opening.wall == *wall)
+					.map(|(id, _)| SurfaceSource::Opening(id)),
+			)
+			.collect(),
+		Proposal::OpeningRemoval(opening) => vec![SurfaceSource::Opening(*opening)],
+		_ => Vec::new(),
+	}
+}
+
+/// The triangles of `sources`, nudged outward so they do not fight the committed surfaces.
+fn tinted_mesh(wall_mesh: &WallMesh, sources: &[SurfaceSource]) -> Mesh {
+	let positions: Vec<[f32; 3]> = wall_mesh
+		.positions()
+		.iter()
+		.zip(wall_mesh.normals())
+		.map(|(&position, &normal)| {
+			graph_to_bevy(position + normal * REMOVAL_LIFT_METRES).to_array()
+		})
+		.collect();
+	let normals: Vec<[f32; 3]> = wall_mesh
+		.normals()
+		.iter()
+		.map(|&normal| graph_to_bevy(normal).to_array())
+		.collect();
+	let indices: Vec<u32> = wall_mesh
+		.sections()
+		.iter()
+		.filter(|section| sources.contains(&section.tag.source))
+		.flat_map(|section| wall_mesh.indices()[section.indices.clone()].iter().copied())
+		.collect();
+
+	Mesh::new(
+		PrimitiveTopology::TriangleList,
+		RenderAssetUsages::default(),
+	)
+	.with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+	.with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+	.with_inserted_indices(Indices::U32(indices))
+}
+
 /// The preview mesh is the whole candidate house, so it would overlap the committed
 /// walls and z-fight with them.
 fn hide_committed_walls_while_previewing(
 	preview: Res<EditPreview>,
 	mut walls: Query<&mut Visibility, With<WallDisplay>>,
 ) {
-	let visibility = if preview.valid_candidate().is_some() {
+	let visibility = if preview.candidate_to_display().is_some() {
 		Visibility::Hidden
 	} else {
 		Visibility::Inherited
@@ -134,10 +234,61 @@ fn draw_preview_gizmos(preview: Res<EditPreview>, house: Res<House>, mut gizmos:
 	};
 	match &state.proposal {
 		Proposal::Wall(wall) => draw_wall_proposal(wall, color, &mut gizmos),
-		Proposal::Opening(opening) => {
-			draw_opening_proposal(house.graph(), opening, color, &mut gizmos)
+		Proposal::Opening(opening) => draw_opening_proposal(
+			house.graph(),
+			opening.wall,
+			&opening.spec,
+			color,
+			&mut gizmos,
+		),
+		Proposal::OpeningEdit(edit) => {
+			if let Some(opening) = house.graph().opening(edit.opening) {
+				draw_opening_proposal(house.graph(), opening.wall, &edit.spec, color, &mut gizmos)
+			}
+		}
+		// A valid change is visible in the preview mesh; a rejected one has none.
+		Proposal::WallDimensions(edit) if state.outcome.is_err() => {
+			draw_wall_line(house.graph(), edit.wall, color, &mut gizmos)
+		}
+		Proposal::WallDimensions(_) => {}
+		Proposal::WallRemoval(wall) => draw_wall_removal(house.graph(), *wall, &mut gizmos),
+		Proposal::OpeningRemoval(opening) => {
+			if let Some(opening) = house.graph().opening(*opening) {
+				draw_opening_proposal(
+					house.graph(),
+					opening.wall,
+					&opening.spec,
+					REMOVAL_COLOR,
+					&mut gizmos,
+				)
+			}
 		}
 	}
+}
+
+/// Marks everything that deleting the wall takes with it: the wall and its openings.
+fn draw_wall_removal(graph: &WallGraph, wall: Wall, gizmos: &mut Gizmos) {
+	draw_wall_line(graph, wall, REMOVAL_COLOR, gizmos);
+	for (_, opening) in graph.openings().filter(|(_, opening)| opening.wall == wall) {
+		draw_opening_proposal(graph, wall, &opening.spec, REMOVAL_COLOR, gizmos);
+	}
+}
+
+/// The wall's centre line along its top.
+fn draw_wall_line(graph: &WallGraph, wall: Wall, color: Color, gizmos: &mut Gizmos) {
+	let (Some(dimensions), Ok(points)) = (
+		graph.wall_dimensions(wall),
+		graph.sample_wall(wall, SAMPLE_DEVIATION_METRES),
+	) else {
+		return;
+	};
+	let top = dimensions.height + OUTLINE_LIFT_METRES;
+	gizmos.linestrip(
+		points
+			.into_iter()
+			.map(|point| graph_to_bevy(point.extend(top))),
+		color,
+	);
 }
 
 fn draw_wall_proposal(proposal: &WallProposal, color: Color, gizmos: &mut Gizmos) {
@@ -150,33 +301,22 @@ fn draw_wall_proposal(proposal: &WallProposal, color: Color, gizmos: &mut Gizmos
 /// clamped onto it.
 fn draw_opening_proposal(
 	graph: &WallGraph,
-	proposal: &OpeningProposal,
+	wall: Wall,
+	spec: &OpeningSpec,
 	color: Color,
 	gizmos: &mut Gizmos,
 ) {
-	let spec = proposal.spec;
-	let (Some(length), Some(dimensions)) = (
-		graph.wall_length(proposal.wall),
-		graph.wall_dimensions(proposal.wall),
-	) else {
+	let (Some(area), Some(dimensions)) =
+		(opening_area(graph, wall, spec), graph.wall_dimensions(wall))
+	else {
 		return;
 	};
-	let half_width = f64::from(spec.width) / 2.0;
-	let parameter_at = |distance: f64| (distance / length).clamp(0.0, 1.0) as f32;
-	let center_parameter = parameter_at(spec.center_distance);
-	let (Some(start), Some(end), Some(tangent)) = (
-		graph.wall_position(
-			proposal.wall,
-			parameter_at(spec.center_distance - half_width),
-		),
-		graph.wall_position(
-			proposal.wall,
-			parameter_at(spec.center_distance + half_width),
-		),
-		graph.wall_tangent(proposal.wall, center_parameter),
-	) else {
-		return;
-	};
+	let OpeningArea {
+		start,
+		end,
+		tangent,
+		..
+	} = area;
 
 	// Slightly outside the faces so the outline is not hidden by the wall surface.
 	let offset = tangent.perp() * (dimensions.thickness / 2.0 + OUTLINE_LIFT_METRES);

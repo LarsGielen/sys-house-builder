@@ -1,71 +1,12 @@
-use bevy::{
-	asset::AssetPlugin,
-	camera::{CameraPlugin, CameraUpdateSystems},
-	gizmos::GizmoPlugin,
-	image::ImagePlugin,
-	input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
-	mesh::MeshPlugin,
-	prelude::*,
-	render::{camera::camera_system, texture::ManualTextureViews},
-	transform::TransformPlugin,
-	window::PrimaryWindow,
-};
-
 use crate::{
-	edit::EditPreview,
-	editor_schedule::EditorSchedulePlugin,
-	ground_pointer::{GroundPointer, GroundPointerPlugin},
-	house::House,
-	orbit_camera::{OrbitCamera, OrbitCameraPlugin},
-	snapping::{SnappedPointer, SnappingPlugin},
-	wall_render::WallRenderPlugin,
-	wall_tool_active::WallToolActivePlugin,
-	wall_tool_drawing::WallToolDrawingPlugin,
-	wall_tool_selection::WallToolSelectionPlugin,
+	edit::EditPreview, ground_pointer::GroundPointer, house::House, snapping::SnappedPointer,
 };
+use bevy::prelude::*;
 
-fn editor_app() -> App {
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		AssetPlugin::default(),
-		TransformPlugin,
-		MeshPlugin,
-		CameraPlugin,
-		ImagePlugin::default(),
-		WindowPlugin::default(),
-		GizmoPlugin,
-	))
-	.init_resource::<Assets<StandardMaterial>>()
-	.init_resource::<ManualTextureViews>()
-	.init_resource::<ButtonInput<MouseButton>>()
-	.init_resource::<ButtonInput<KeyCode>>()
-	.init_resource::<AccumulatedMouseMotion>()
-	.init_resource::<AccumulatedMouseScroll>()
-	.init_resource::<House>()
-	.add_plugins((
-		EditorSchedulePlugin,
-		OrbitCameraPlugin,
-		GroundPointerPlugin,
-		SnappingPlugin,
-		WallToolActivePlugin,
-		WallToolDrawingPlugin,
-		WallToolSelectionPlugin,
-		WallRenderPlugin,
-	))
-	.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));
-	let mut window = app
-		.world_mut()
-		.query_filtered::<&mut Window, With<PrimaryWindow>>()
-		.single_mut(app.world_mut())
-		.unwrap();
-	window.focused = true;
-	let center = window.size() / 2.0;
-	window.set_cursor_position(Some(center));
-	app.world_mut()
-		.spawn((Camera3d::default(), OrbitCamera::default()));
-	app
-}
+#[path = "support.rs"]
+pub(crate) mod support;
+
+use support::editor_app;
 
 #[test]
 fn picking_uses_current_camera_ancestors_and_markers_propagate_in_the_same_frame() {
@@ -129,26 +70,4 @@ fn moving_over_ui_and_clicking_does_not_use_the_previous_ground_hit() {
 	app.update();
 	assert!(app.world().resource::<EditPreview>().state.is_none());
 	assert_eq!(app.world().resource::<House>().revision(), 0);
-}
-
-#[test]
-fn editor_ui_runs_with_the_ordered_picking_and_presentation_schedule() {
-	let mut app = editor_app();
-	app.init_resource::<Assets<bevy::image::TextureAtlasLayout>>()
-		.add_plugins((
-			bevy::input::InputPlugin,
-			bevy::picking::DefaultPickingPlugins,
-			bevy::text::TextPlugin,
-			bevy::ui::UiPlugin,
-			crate::editor_ui::EditorUiPlugin,
-		));
-	app.update();
-	app.update();
-	assert!(app.world().resource::<GroundPointer>().hit.is_some());
-	assert!(
-		app.world_mut()
-			.query::<&Text>()
-			.iter(app.world())
-			.any(|text| text.0.starts_with("Snap: "))
-	);
 }

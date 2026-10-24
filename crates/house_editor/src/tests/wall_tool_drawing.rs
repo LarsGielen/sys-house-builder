@@ -1,4 +1,7 @@
 use super::*;
+use crate::edit::propose_wall;
+use crate::tests::support::pressed_mouse as pressed;
+use crate::tests::support::released_mouse as released;
 use crate::wall_tool_active::ActiveTool;
 use crate::{
 	ground_pointer::PointerOnGround,
@@ -22,20 +25,6 @@ fn snapped_at(position: Vec2) -> SnappedPointer {
 			source: SnapSource::Free,
 		}),
 	}
-}
-
-fn pressed() -> ButtonInput<MouseButton> {
-	let mut mouse = ButtonInput::default();
-	mouse.press(MouseButton::Left);
-	mouse
-}
-
-fn released() -> ButtonInput<MouseButton> {
-	let mut mouse = ButtonInput::default();
-	mouse.press(MouseButton::Left);
-	mouse.clear();
-	mouse.release(MouseButton::Left);
-	mouse
 }
 
 #[test]
@@ -208,7 +197,7 @@ fn house_changes_refresh_an_identical_proposal_even_off_the_ground() {
 		.insert_resource(snapped_at(Vec2::X));
 	app.update();
 	let candidate = propose_wall(
-		app.world().resource::<House>().graph(),
+		app.world().resource::<House>().committed(),
 		&WallProposal {
 			start: Vec2::ZERO,
 			end: Vec2::Y,
