@@ -9,6 +9,7 @@ use crate::{
 	opening_area::{OpeningArea, opening_area},
 	text_fields::TextFocus,
 	wall_tool_active::{ActiveTool, Tool},
+	wall_tool_handles::HoveredHandle,
 };
 
 const HOVER_COLOR: Color = Color::srgb(1.0, 0.85, 0.2);
@@ -33,6 +34,7 @@ pub enum WallToolSelectionSystems {
 impl Plugin for WallToolSelectionPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<HoveredTarget>()
+			.init_resource::<HoveredHandle>()
 			.init_resource::<SelectedTarget>()
 			.init_resource::<WallSelectionCarryOver>()
 			.add_systems(
@@ -134,6 +136,8 @@ struct SelectionInput<'w, 's> {
 	keyboard: Res<'w, ButtonInput<KeyCode>>,
 	ground_pointer: Res<'w, GroundPointer>,
 	typing: TextFocus<'w, 's>,
+	/// A press on a handle of the selected wall starts a drag, not a new selection.
+	hovered_handle: Res<'w, HoveredHandle>,
 }
 
 fn update_selection(
@@ -173,7 +177,10 @@ fn update_selection(
 		return;
 	}
 	// A ray exists only when the viewport owns the pointer, so UI clicks never get here.
-	if input.mouse.just_pressed(MouseButton::Left) && input.ground_pointer.ray.is_some() {
+	if input.mouse.just_pressed(MouseButton::Left)
+		&& input.ground_pointer.ray.is_some()
+		&& input.hovered_handle.0.is_none()
+	{
 		selected.set_if_neq(SelectedTarget(hovered_target.0));
 	}
 }

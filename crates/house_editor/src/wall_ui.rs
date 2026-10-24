@@ -1,14 +1,19 @@
 use crate::{
-	edit::{EditCandidate, EditError, WallDimensionsProposal, WallProposal},
-	editor_ui::{EditorUiSystems, step_button},
+	arc_fields::arc_field_controls,
+	edit::{
+		ArcProposal, BendProposal, EditCandidate, EditError, MoveProposal, WallDimensionsProposal,
+		WallProposal,
+	},
+	editor_ui::{ENABLED_BUTTON_COLOR, EditorUiSystems, step_button},
 	house::House,
 	opening_category::OpeningCategory,
 	wall_tool_active::Tool,
+	wall_tool_arc::ArcMode,
 	wall_tool_drawing::{StepDirection, WallDrawingSettings},
 	wall_tool_edit_wall::{ConfirmWallDeletion, DeleteSelectedWall},
 };
 use bevy::prelude::*;
-use wall_graph::{Wall, WallGraph};
+use wall_graph::{Wall, WallGraph, arc_radius};
 
 pub(super) fn describe_wall(graph: &WallGraph, wall: Wall) -> Option<String> {
 	let dimensions = graph.wall_dimensions(wall)?;
@@ -50,6 +55,83 @@ pub(super) fn wall_drawing_controls() -> impl Bundle {
 			dimension_row(DimensionField::Thickness),
 		],
 	)
+}
+
+#[derive(Component)]
+struct ArcModeButton(ArcMode);
+
+#[derive(Component)]
+struct ArcModeHint;
+
+pub(super) fn arc_drawing_controls() -> impl Bundle {
+	(
+		Node {
+			flex_direction: FlexDirection::Column,
+			row_gap: Val::Px(8.0),
+			..default()
+		},
+		children![
+			(
+				Node {
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					row_gap: Val::Px(8.0),
+					column_gap: Val::Px(8.0),
+					..default()
+				},
+				children![
+					(step_button("Free"), ArcModeButton(ArcMode::Free)),
+					(step_button("1 tangent"), ArcModeButton(ArcMode::OneTangent)),
+					(
+						step_button("2 tangents"),
+						ArcModeButton(ArcMode::TwoTangents)
+					),
+				],
+			),
+			(Text::new(""), ArcModeHint),
+			dimension_row(DimensionField::Height),
+			dimension_row(DimensionField::Thickness),
+			arc_field_controls(),
+		],
+	)
+}
+
+fn choose_arc_mode(
+	buttons: Query<(&Interaction, &ArcModeButton), Changed<Interaction>>,
+	mut mode: ResMut<ArcMode>,
+) {
+	for (interaction, button) in &buttons {
+		if *interaction == Interaction::Pressed {
+			mode.set_if_neq(button.0);
+		}
+	}
+}
+
+fn update_arc_mode_controls(
+	mode: Res<ArcMode>,
+	mut buttons: Query<(&ArcModeButton, &mut BackgroundColor)>,
+	mut hint: Single<&mut Text, With<ArcModeHint>>,
+) {
+	for (button, mut background) in &mut buttons {
+		let color = if button.0 == *mode {
+			Color::srgb(0.3, 0.45, 0.7)
+		} else {
+			ENABLED_BUTTON_COLOR
+		};
+		background.set_if_neq(BackgroundColor(color));
+	}
+	hint.0 = match *mode {
+		ArcMode::Free => {
+			"Free arc: place both ends like a wall, then move the pointer to bend it and click."
+		}
+		ArcMode::OneTangent => {
+			"Click a free wall end, then the other end. The arc leaves the wall smoothly."
+		}
+		ArcMode::TwoTangents => {
+			"Click a free wall end, then a second free wall end. Both joins are smooth."
+		}
+	}
+	.to_string();
 }
 
 fn dimension_row(field: DimensionField) -> impl Bundle {
@@ -161,6 +243,60 @@ pub(super) fn describe_wall_proposal(proposal: &WallProposal, error: Option<&Edi
 	}
 }
 
+pub(super) fn describe_arc_proposal(proposal: &ArcProposal, error: Option<&EditError>) -> String {
+	let derived =
+		proposal.sweep().ok().map(
+			|sweep| match arc_radius(proposal.start, proposal.end, sweep) {
+				Some(radius) => {
+					format!("Radius {radius:.3} m, angle {:.1} deg", sweep.to_degrees())
+				}
+				None => "Straight".to_string(),
+			},
+		);
+	match (error, derived) {
+		(None, Some(derived)) => format!(
+			"{derived}\nHeight {:.2} m, thickness {:.2} m",
+			proposal.dimensions.height, proposal.dimensions.thickness
+		),
+		(Some(error), Some(derived)) => format!("Invalid arc ({derived}): {error}"),
+		(Some(error), None) => format!("Invalid arc: {error}"),
+		(None, None) => String::new(),
+	}
+}
+
+/// The effect of a drag on the layout, including any smooth join it breaks.
+fn describe_reshape(outcome: Result<&EditCandidate, &EditError>, what: &str) -> String {
+	match outcome {
+		Err(error) => format!("Cannot {what}: {error}"),
+		Ok(candidate) => {
+			let report = candidate.report();
+			let joins = match report.lost_smooth_joins.len() {
+				0 => "Smooth joins kept".to_string(),
+				count => format!("Smooth join lost at {count} junction(s), marked in orange"),
+			};
+			format!(
+				"{} wall(s) change\n{joins}\nRelease applies, Esc cancels",
+				report.rebuilt_walls.len()
+			)
+		}
+	}
+}
+
+pub(super) fn describe_move(
+	_proposal: &MoveProposal,
+	outcome: Result<&EditCandidate, &EditError>,
+) -> String {
+	describe_reshape(outcome, "move this")
+}
+
+pub(super) fn describe_bend(
+	proposal: &BendProposal,
+	outcome: Result<&EditCandidate, &EditError>,
+) -> String {
+	let bend = format!("Sweep {:.1} deg", proposal.sweep.to_degrees());
+	format!("{bend}\n{}", describe_reshape(outcome, "bend this wall"))
+}
+
 pub(super) fn describe_wall_dimensions(
 	proposal: &WallDimensionsProposal,
 	error: Option<&EditError>,
@@ -213,12 +349,16 @@ pub(super) fn describe_wall_removal(
 pub(super) fn register(app: &mut App) {
 	app.add_systems(
 		Update,
-		(step_dimensions, request_wall_command).in_set(EditorUiSystems::Settings),
+		(step_dimensions, request_wall_command, choose_arc_mode).in_set(EditorUiSystems::Settings),
 	)
 	.add_systems(
 		PostUpdate,
 		update_dimension_labels
 			.run_if(resource_changed::<WallDrawingSettings>)
 			.in_set(EditorUiSystems::Readouts),
+	)
+	.add_systems(
+		PostUpdate,
+		update_arc_mode_controls.in_set(EditorUiSystems::Readouts),
 	);
 }

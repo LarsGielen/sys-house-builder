@@ -1,3 +1,5 @@
+#[path = "tests/arc_solvers.rs"]
+mod arc_solvers;
 #[path = "tests/arcs.rs"]
 mod arcs;
 #[path = "tests/crossing.rs"]
@@ -20,9 +22,13 @@ mod queries;
 mod rejection;
 #[path = "tests/removal.rs"]
 mod removal;
+#[path = "tests/reshape.rs"]
+mod reshape;
 #[path = "tests/splitting.rs"]
 mod splitting;
 #[path = "tests/support.rs"]
 mod support;
+#[path = "tests/tangent_joins.rs"]
+mod tangent_joins;
 #[path = "tests/topology.rs"]
 mod topology;

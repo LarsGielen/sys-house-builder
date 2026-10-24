@@ -1,11 +1,3 @@
-#![cfg_attr(
-	not(test),
-	expect(
-		dead_code,
-		reason = "replacing the document arrives with project files"
-	)
-)]
-
 use crate::house::House;
 
 /// What the user chose when asked about unsaved changes before the document is replaced or

@@ -6,6 +6,7 @@ pub enum Tool {
 	#[default]
 	Select,
 	DrawWall,
+	DrawArc,
 	PlaceOpening,
 	Delete,
 }

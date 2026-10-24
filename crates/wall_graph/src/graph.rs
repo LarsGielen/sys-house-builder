@@ -40,6 +40,8 @@ pub enum WallError {
 	UnknownOpening,
 	/// A wall thickness or height is not finite and positive.
 	InvalidDimensions,
+	/// A reshaped wall would cross, touch, or land on another wall or node.
+	CrossesWall,
 	/// A proposed endpoint position contains a non-finite coordinate.
 	InvalidPosition,
 	/// An endpoint is not a node of this graph.
@@ -74,6 +76,7 @@ impl fmt::Display for WallError {
 			WallError::OpeningTooCloseToJunction => "an opening is too close to a wall junction",
 			WallError::UnknownOpening => "the opening does not exist",
 			WallError::InvalidDimensions => "wall thickness and height must be finite and positive",
+			WallError::CrossesWall => "the reshaped wall would cross or touch another wall",
 			WallError::InvalidPosition => "a node position must contain only finite coordinates",
 			WallError::UnknownNode => "a wall endpoint is not a node of this graph",
 			WallError::SameNode => "a wall cannot start and end at the same node",
@@ -1744,6 +1747,9 @@ impl WallGraph {
 		}
 	}
 }
+
+mod reshape;
+pub use reshape::{ReshapeReport, SmoothJoin};
 
 #[cfg(test)]
 #[path = "tests.rs"]

@@ -17,7 +17,7 @@ use bevy::{
 	ui::{FocusPolicy, RelativeCursorPosition},
 };
 
-const ENABLED_BUTTON_COLOR: Color = Color::srgb(0.25, 0.25, 0.3);
+pub(crate) const ENABLED_BUTTON_COLOR: Color = Color::srgb(0.25, 0.25, 0.3);
 const DISABLED_BUTTON_COLOR: Color = Color::srgb(0.15, 0.15, 0.17);
 
 pub struct EditorUiPlugin;
@@ -32,6 +32,7 @@ impl Plugin for EditorUiPlugin {
 	fn build(&self, app: &mut App) {
 		crate::opening_ui::register(app);
 		crate::wall_ui::register(app);
+		crate::project_ui::register(app);
 		app.add_systems(Startup, setup_editor_panel)
 			.add_systems(
 				Update,
@@ -66,6 +67,7 @@ struct EditorPanel;
 #[derive(Component, Clone, Copy)]
 enum PanelSection {
 	WallDrawing,
+	ArcDrawing,
 	OpeningPlacement,
 	SelectedOpening,
 	SelectedWall,
@@ -107,12 +109,14 @@ fn setup_editor_panel(mut commands: Commands) {
 				..default()
 			},
 			children![
+				crate::project_ui::project_controls(),
 				tool_controls(),
 				history_controls(),
 				snap_controls(),
 				(Text::new(""), EditReadout),
 				(Text::new(""), NoticeReadout),
 				section(PanelSection::WallDrawing, wall_ui::wall_drawing_controls()),
+				section(PanelSection::ArcDrawing, wall_ui::arc_drawing_controls()),
 				section(
 					PanelSection::OpeningPlacement,
 					opening_ui::opening_controls()
@@ -170,6 +174,7 @@ fn update_panel_sections(
 	for (entity, section, mut node) in &mut sections {
 		let show = match section {
 			PanelSection::WallDrawing => tool.0 == Tool::DrawWall,
+			PanelSection::ArcDrawing => tool.0 == Tool::DrawArc,
 			PanelSection::OpeningPlacement => tool.0 == Tool::PlaceOpening,
 			PanelSection::SelectedOpening => tool.0 == Tool::Select && selected.opening().is_some(),
 			PanelSection::SelectedWall => tool.0 == Tool::Select && selected.wall().is_some(),
@@ -241,6 +246,7 @@ fn tool_controls() -> impl Bundle {
 				children![
 					(step_button("Select"), ToolButton(Tool::Select)),
 					(step_button("Draw wall"), ToolButton(Tool::DrawWall)),
+					(step_button("Arc"), ToolButton(Tool::DrawArc)),
 					(step_button("Opening"), ToolButton(Tool::PlaceOpening)),
 					(step_button("Delete"), ToolButton(Tool::Delete)),
 				],
@@ -324,6 +330,7 @@ fn update_active_tool_label(
 	label.0 = match active_tool.0 {
 		Tool::Select => "Tool: Select",
 		Tool::DrawWall => "Tool: Draw wall",
+		Tool::DrawArc => "Tool: Draw arc",
 		Tool::PlaceOpening => "Tool: Place opening",
 		Tool::Delete => "Tool: Delete",
 	}
@@ -373,6 +380,21 @@ fn update_edit_readout(
 			outcome,
 			..
 		}) => wall_ui::describe_wall_proposal(proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::Arc(proposal),
+			outcome,
+			..
+		}) => wall_ui::describe_arc_proposal(proposal, outcome.as_ref().err()),
+		Some(PreviewState {
+			proposal: Proposal::Move(proposal),
+			outcome,
+			..
+		}) => wall_ui::describe_move(proposal, outcome.as_ref()),
+		Some(PreviewState {
+			proposal: Proposal::Bend(proposal),
+			outcome,
+			..
+		}) => wall_ui::describe_bend(proposal, outcome.as_ref()),
 		Some(PreviewState {
 			proposal: Proposal::Opening(proposal),
 			outcome,

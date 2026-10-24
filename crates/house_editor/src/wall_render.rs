@@ -3,12 +3,12 @@ use bevy::{
 	mesh::{Indices, PrimitiveTopology},
 	prelude::*,
 };
-use wall_graph::{OpeningSpec, Wall, WallGraph};
+use wall_graph::{OpeningSpec, Wall, WallGraph, arc_points};
 use wall_mesh::{SurfaceSource, WallMesh};
 
 use crate::{
 	coordinates::graph_to_bevy,
-	edit::{EditPreview, Proposal, WallProposal},
+	edit::{ArcProposal, EditPreview, Proposal, WallProposal},
 	house::House,
 	opening_area::{OpeningArea, opening_area},
 };
@@ -21,6 +21,8 @@ const SAMPLE_DEVIATION_METRES: f32 = 0.01;
 // Keeps the deletion tint in front of the surfaces it covers.
 const REMOVAL_LIFT_METRES: f32 = 0.003;
 const REMOVAL_COLOR: Color = Color::srgb(0.9, 0.2, 0.2);
+const LOST_JOIN_COLOR: Color = Color::srgb(1.0, 0.55, 0.1);
+const LOST_JOIN_RADIUS_METRES: f32 = 0.2;
 
 /// Displays the committed walls and the preview of the edit being proposed.
 pub struct WallRenderPlugin;
@@ -38,6 +40,7 @@ impl Plugin for WallRenderPlugin {
 				rebuild_removal_entity.run_if(resource_changed::<EditPreview>),
 				hide_committed_walls_while_previewing,
 				draw_preview_gizmos,
+				draw_lost_smooth_joins,
 			)
 				.chain()
 				.in_set(WallRenderSystems),
@@ -234,6 +237,18 @@ fn draw_preview_gizmos(preview: Res<EditPreview>, house: Res<House>, mut gizmos:
 	};
 	match &state.proposal {
 		Proposal::Wall(wall) => draw_wall_proposal(wall, color, &mut gizmos),
+		Proposal::Arc(arc) => draw_arc_proposal(arc, color, &mut gizmos),
+		// A valid drag is visible in the preview mesh; a rejected one has none, so its
+		// walls are outlined where they would have gone.
+		Proposal::Move(edit) => {
+			for (node, position) in std::iter::once(edit.first).chain(edit.second) {
+				draw_handle_marker(house.graph(), node, position, color, &mut gizmos);
+			}
+		}
+		Proposal::Bend(edit) if state.outcome.is_err() => {
+			draw_wall_line(house.graph(), edit.wall, color, &mut gizmos)
+		}
+		Proposal::Bend(_) => {}
 		Proposal::Opening(opening) => draw_opening_proposal(
 			house.graph(),
 			opening.wall,
@@ -264,6 +279,57 @@ fn draw_preview_gizmos(preview: Res<EditPreview>, house: Res<House>, mut gizmos:
 			}
 		}
 	}
+}
+
+/// The smooth joins a drag cannot keep, so they are visible before the drag is committed.
+fn draw_lost_smooth_joins(preview: Res<EditPreview>, mut gizmos: Gizmos) {
+	let Some(candidate) = preview.valid_candidate() else {
+		return;
+	};
+	for &node in &candidate.report().lost_smooth_joins {
+		let Some(position) = candidate.graph().node_position(node) else {
+			continue;
+		};
+		gizmos.circle(
+			Isometry3d::new(
+				graph_to_bevy(position.extend(PREVIEW_LINE_HEIGHT_METRES)),
+				Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+			),
+			LOST_JOIN_RADIUS_METRES,
+			LOST_JOIN_COLOR,
+		);
+	}
+}
+
+fn draw_handle_marker(
+	graph: &WallGraph,
+	node: wall_graph::WallNodeId,
+	position: Vec2,
+	color: Color,
+	gizmos: &mut Gizmos,
+) {
+	let to_bevy = |position: Vec2| graph_to_bevy(position.extend(PREVIEW_LINE_HEIGHT_METRES));
+	if let Some(origin) = graph.node_position(node) {
+		gizmos.line(to_bevy(origin), to_bevy(position), color);
+	}
+	gizmos.sphere(
+		Isometry3d::from_translation(to_bevy(position)),
+		SAMPLE_DEVIATION_METRES * 8.0,
+		color,
+	);
+}
+
+/// The arc as proposed, drawn even when it is invalid and has no mesh. A definition with no
+/// sweep yet shows the chord.
+fn draw_arc_proposal(proposal: &ArcProposal, color: Color, gizmos: &mut Gizmos) {
+	let sweep = proposal.sweep().unwrap_or(0.0);
+	let points = arc_points(proposal.start, proposal.end, sweep, SAMPLE_DEVIATION_METRES);
+	gizmos.linestrip(
+		points
+			.into_iter()
+			.map(|point| graph_to_bevy(point.extend(PREVIEW_LINE_HEIGHT_METRES))),
+		color,
+	);
 }
 
 /// Marks everything that deleting the wall takes with it: the wall and its openings.

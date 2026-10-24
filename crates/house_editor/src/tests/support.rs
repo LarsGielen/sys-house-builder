@@ -12,6 +12,7 @@ use bevy::{
 };
 
 use crate::{
+	arc_fields::ArcFieldsPlugin,
 	edit::{OpeningProposal, WallProposal, propose_opening, propose_wall},
 	editor_schedule::EditorSchedulePlugin,
 	ground_pointer::GroundPointerPlugin,
@@ -24,15 +25,19 @@ use crate::{
 	wall_fields::WallFieldsPlugin,
 	wall_render::WallRenderPlugin,
 	wall_tool_active::WallToolActivePlugin,
+	wall_tool_arc::WallToolArcPlugin,
 	wall_tool_delete::WallToolDeletePlugin,
 	wall_tool_drawing::WallToolDrawingPlugin,
 	wall_tool_edit_opening::WallToolEditOpeningPlugin,
 	wall_tool_edit_wall::WallToolEditWallPlugin,
+	wall_tool_handles::WallToolHandlesPlugin,
 	wall_tool_opening::WallToolOpeningPlugin,
 	wall_tool_selection::WallToolSelectionPlugin,
 };
 
-pub(crate) fn editor_app() -> App {
+/// The Bevy plugins and resources the editor's systems need, without any editor plugin, for
+/// tests that drive one tool with hand-made pointer resources.
+pub(crate) fn tool_test_app() -> App {
 	let mut app = App::new();
 	app.add_plugins((
 		MinimalPlugins,
@@ -49,27 +54,38 @@ pub(crate) fn editor_app() -> App {
 	.init_resource::<ButtonInput<MouseButton>>()
 	.init_resource::<ButtonInput<KeyCode>>()
 	.init_resource::<AccumulatedMouseMotion>()
-	.init_resource::<AccumulatedMouseScroll>()
-	.init_resource::<House>()
-	.add_plugins((
-		EditorSchedulePlugin,
-		OrbitCameraPlugin,
-		GroundPointerPlugin,
-		SnappingPlugin,
-		WallToolActivePlugin,
-		WallToolDrawingPlugin,
-		WallToolOpeningPlugin,
-		WallToolDeletePlugin,
-		WallToolSelectionPlugin,
-		WallToolEditOpeningPlugin,
-		WallToolEditWallPlugin,
-		TextFieldsPlugin,
-		OpeningFieldsPlugin,
-		WallFieldsPlugin,
-		WallRenderPlugin,
-	))
-	.add_plugins(HistoryPlugin)
-	.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));
+	.init_resource::<AccumulatedMouseScroll>();
+	app
+}
+
+pub(crate) fn editor_app() -> App {
+	let mut app = tool_test_app();
+	app.init_resource::<House>()
+		.add_plugins((
+			EditorSchedulePlugin,
+			OrbitCameraPlugin,
+			GroundPointerPlugin,
+			SnappingPlugin,
+			WallToolActivePlugin,
+			WallToolDrawingPlugin,
+			WallToolOpeningPlugin,
+			WallToolDeletePlugin,
+			WallToolSelectionPlugin,
+			WallToolEditOpeningPlugin,
+			WallToolEditWallPlugin,
+			TextFieldsPlugin,
+			OpeningFieldsPlugin,
+			WallFieldsPlugin,
+			WallRenderPlugin,
+		))
+		.add_plugins((
+			HistoryPlugin,
+			WallToolArcPlugin,
+			ArcFieldsPlugin,
+			WallToolHandlesPlugin,
+			crate::project::ProjectPlugin,
+		))
+		.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));
 	let mut window = app
 		.world_mut()
 		.query_filtered::<&mut Window, With<PrimaryWindow>>()

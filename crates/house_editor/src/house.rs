@@ -102,12 +102,18 @@ impl House {
 		self.content_id != self.saved_content_id
 	}
 
-	#[cfg_attr(
-		not(test),
-		expect(dead_code, reason = "saving arrives with project files")
-	)]
 	pub fn mark_saved(&mut self) {
 		self.saved_content_id = self.content_id;
+	}
+
+	/// Replaces the whole document, as when a project is opened or started. History belongs to
+	/// the document it was recorded on, so it is dropped, and the new document counts as saved.
+	pub fn replace_document(&mut self, candidate: EditCandidate) {
+		self.next_content_id += 1;
+		self.replace(candidate, self.next_content_id);
+		self.undo_stack.clear();
+		self.redo_stack.clear();
+		self.mark_saved();
 	}
 
 	/// The one place the committed document changes, so the scene refresh and the cache

@@ -222,7 +222,7 @@ fn stable_source_order(
 	}
 }
 
-fn snap_to_grid(position: Vec2, spacing: f32) -> Vec2 {
+pub(crate) fn snap_to_grid(position: Vec2, spacing: f32) -> Vec2 {
 	(position / spacing).round() * spacing
 }
 

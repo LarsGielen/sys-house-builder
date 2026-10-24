@@ -143,3 +143,55 @@ fn a_new_edit_at_an_old_position_is_not_the_saved_document() {
 	house.undo();
 	assert!(house.is_modified());
 }
+
+#[test]
+fn undoing_a_drag_restores_connected_walls_and_openings_together() {
+	let mut house = House::default();
+	commit_wall(&mut house, Vec2::new(4.0, 0.0));
+	commit_window(&mut house);
+	let corner = house.graph().walls().next().unwrap().destination();
+	let other_wall = propose_wall(
+		house.committed(),
+		&WallProposal {
+			start: Vec2::new(4.0, 0.0),
+			end: Vec2::new(4.0, 3.0),
+			dimensions: WallDimensions::default(),
+		},
+	)
+	.unwrap();
+	house.commit(other_wall);
+	let opening = house.graph().openings().next().unwrap().0;
+	let before_spec = house.graph().opening(opening).unwrap().spec;
+
+	let drag = crate::edit::propose_move(
+		house.committed(),
+		&crate::edit::MoveProposal {
+			first: (corner, Vec2::new(5.0, 1.0)),
+			second: None,
+			grabbed: None,
+		},
+	)
+	.unwrap();
+	house.commit(drag);
+	assert_eq!(
+		house.graph().node_position(corner),
+		Some(Vec2::new(5.0, 1.0))
+	);
+	assert_ne!(house.graph().opening(opening).unwrap().spec, before_spec);
+
+	assert!(house.undo());
+	assert_eq!(
+		house.graph().node_position(corner),
+		Some(Vec2::new(4.0, 0.0))
+	);
+	assert_eq!(house.graph().opening(opening).unwrap().spec, before_spec);
+	assert_eq!(
+		house.committed().categories().get(opening),
+		Some(OpeningCategory::Window)
+	);
+	assert!(house.redo());
+	assert_eq!(
+		house.graph().node_position(corner),
+		Some(Vec2::new(5.0, 1.0))
+	);
+}

@@ -34,6 +34,7 @@ fn panel_sections_follow_the_tool_and_selection() {
 			Some(PanelSection::OpeningPlacement),
 		),
 		(Tool::DrawWall, None, Some(PanelSection::WallDrawing)),
+		(Tool::DrawArc, None, Some(PanelSection::ArcDrawing)),
 		(Tool::Delete, None, None),
 	] {
 		app.world_mut().write_message(ActivateTool(tool));

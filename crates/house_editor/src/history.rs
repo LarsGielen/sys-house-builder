@@ -14,7 +14,9 @@ pub struct HistorySystems;
 
 impl Plugin for HistoryPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_message::<HistoryRequest>()
+		app.init_resource::<EditPreview>()
+			.init_resource::<EditNotice>()
+			.add_message::<HistoryRequest>()
 			.add_message::<DocumentRestored>()
 			.add_systems(PostUpdate, apply_history_requests.in_set(HistorySystems));
 	}

@@ -361,3 +361,213 @@ fn taking_a_preview_requires_its_proposal_and_current_revision() {
 	assert!(preview.take_valid(proposal, 2).is_some());
 	assert!(preview.state.is_none());
 }
+
+fn arc_proposal(start: Vec2, end: Vec2, definition: ArcDefinition) -> ArcProposal {
+	ArcProposal {
+		start,
+		end,
+		definition,
+		dimensions: WallDimensions::default(),
+	}
+}
+
+#[test]
+fn a_free_arc_through_a_bend_commits_a_valid_curved_wall() {
+	let proposal = arc_proposal(
+		Vec2::ZERO,
+		Vec2::new(4.0, 0.0),
+		ArcDefinition::Bend(Vec2::new(2.0, 1.0)),
+	);
+	let candidate = propose_arc(&EditCandidate::default(), &proposal).unwrap();
+	let wall = candidate.graph().walls().next().unwrap();
+	assert!(matches!(
+		candidate.graph().wall_curve(wall),
+		Some(wall_graph::WallCurve::CircularArc { .. })
+	));
+	assert_eq!(
+		candidate.mesh(),
+		&wall_mesh::generate(candidate.graph(), &MeshSettings::default()).unwrap()
+	);
+}
+
+#[test]
+fn a_bend_on_the_chord_is_an_arc_error_and_leaves_the_house_alone() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(0.0, 5.0));
+	let proposal = arc_proposal(
+		Vec2::new(2.0, 0.0),
+		Vec2::new(4.0, 0.0),
+		ArcDefinition::Bend(Vec2::new(3.0, 0.0)),
+	);
+	assert_eq!(
+		propose_arc(&committed, &proposal).err(),
+		Some(EditError::Arc(wall_graph::ArcError::BendOnChord))
+	);
+	assert_eq!(committed.graph().walls().count(), 1);
+}
+
+#[test]
+fn a_tangent_arc_meets_the_wall_it_continues_smoothly() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(2.0, 0.0));
+	let proposal = arc_proposal(
+		Vec2::new(2.0, 0.0),
+		Vec2::new(4.0, 2.0),
+		ArcDefinition::OneTangent {
+			start_direction: Vec2::X,
+		},
+	);
+	let candidate = propose_arc(&committed, &proposal).unwrap();
+	assert_eq!(candidate.graph().walls().count(), 2);
+	assert_eq!(candidate.graph().smooth_joins().len(), 1);
+}
+
+#[test]
+fn a_tangent_arc_straight_ahead_becomes_a_straight_wall() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(2.0, 0.0));
+	let proposal = arc_proposal(
+		Vec2::new(2.0, 0.0),
+		Vec2::new(4.0, 0.0),
+		ArcDefinition::OneTangent {
+			start_direction: Vec2::X,
+		},
+	);
+	// Collinear and compatible, so the new piece merges into one wall.
+	let candidate = propose_arc(&committed, &proposal).unwrap();
+	assert_eq!(candidate.graph().walls().count(), 1);
+}
+
+#[test]
+fn two_tangent_requests_that_cannot_be_met_are_errors_not_free_arcs() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(2.0, 0.0));
+	let inconsistent = arc_proposal(
+		Vec2::new(2.0, 0.0),
+		Vec2::new(6.0, 0.0),
+		ArcDefinition::TwoTangents {
+			start_direction: Vec2::X,
+			end_direction: Some(Vec2::new(1.0, 1.0)),
+		},
+	);
+	assert_eq!(
+		propose_arc(&committed, &inconsistent).err(),
+		Some(EditError::Arc(wall_graph::ArcError::InconsistentTangents))
+	);
+	let missing = arc_proposal(
+		Vec2::new(2.0, 0.0),
+		Vec2::new(6.0, 0.0),
+		ArcDefinition::TwoTangents {
+			start_direction: Vec2::X,
+			end_direction: None,
+		},
+	);
+	assert_eq!(
+		propose_arc(&committed, &missing).err(),
+		Some(EditError::Arc(wall_graph::ArcError::MissingConnection))
+	);
+}
+
+#[test]
+fn a_typed_radius_keeps_the_side_and_size_of_the_arc() {
+	let proposal = arc_proposal(
+		Vec2::ZERO,
+		Vec2::new(4.0, 0.0),
+		ArcDefinition::Bend(Vec2::new(2.0, 1.0)),
+	);
+	let current = proposal.sweep().unwrap();
+	let retyped = proposal.sweep_for_radius(2.5).unwrap();
+	assert_eq!(current.signum(), retyped.signum());
+	assert!(retyped.abs() < std::f32::consts::PI);
+	assert!(proposal.sweep_for_radius(1.0).is_err());
+}
+
+#[test]
+fn moving_a_junction_keeps_openings_and_categories_and_reports_the_rebuilt_walls() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(6.0, 0.0));
+	let wall = committed.graph().walls().next().unwrap();
+	let committed = propose_opening(
+		&committed,
+		&opening(wall, 3.0, 0.9, OpeningCategory::Window),
+	)
+	.unwrap();
+	let opening_id = committed.graph().openings().next().unwrap().0;
+	let end = wall.destination();
+
+	let candidate = propose_move(
+		&committed,
+		&MoveProposal {
+			first: (end, Vec2::new(8.0, 0.0)),
+			second: None,
+			grabbed: Some(wall),
+		},
+	)
+	.unwrap();
+
+	assert!(candidate.graph().opening(opening_id).is_some());
+	assert_eq!(
+		candidate.categories().get(opening_id),
+		Some(OpeningCategory::Window)
+	);
+	assert_eq!(candidate.report().rebuilt_walls.len(), 1);
+	assert_eq!(
+		candidate.mesh(),
+		&wall_mesh::generate(candidate.graph(), &MeshSettings::default()).unwrap()
+	);
+}
+
+#[test]
+fn a_rejected_move_is_an_error_and_the_committed_candidate_is_unchanged() {
+	let committed = propose_wall(
+		&candidate_with_wall(Vec2::ZERO, Vec2::new(4.0, 0.0)),
+		&WallProposal {
+			start: Vec2::new(0.0, 2.0),
+			end: Vec2::new(4.0, 2.0),
+			dimensions: WallDimensions::default(),
+		},
+	)
+	.unwrap();
+	let node = committed
+		.graph()
+		.nodes()
+		.find(|(_, position)| *position == Vec2::new(4.0, 2.0))
+		.unwrap()
+		.0;
+	let result = propose_move(
+		&committed,
+		&MoveProposal {
+			first: (node, Vec2::new(4.0, -2.0)),
+			second: None,
+			grabbed: None,
+		},
+	);
+	assert_eq!(
+		result.err(),
+		Some(EditError::Graph(wall_graph::WallError::CrossesWall))
+	);
+	assert_eq!(
+		committed.graph().node_position(node),
+		Some(Vec2::new(4.0, 2.0))
+	);
+}
+
+#[test]
+fn bending_a_wall_changes_its_curve_and_straightening_restores_it() {
+	let committed = candidate_with_wall(Vec2::ZERO, Vec2::new(4.0, 0.0));
+	let wall = committed.graph().walls().next().unwrap();
+	let bent = propose_bend(&committed, &BendProposal { wall, sweep: 1.0 }).unwrap();
+	let bent_wall = bent.report().rebuilt_walls[0].1;
+	assert!(matches!(
+		bent.graph().wall_curve(bent_wall),
+		Some(wall_graph::WallCurve::CircularArc { .. })
+	));
+	let straight = propose_bend(
+		&bent,
+		&BendProposal {
+			wall: bent_wall,
+			sweep: 0.0,
+		},
+	)
+	.unwrap();
+	let straight_wall = straight.graph().walls().next().unwrap();
+	assert!(matches!(
+		straight.graph().wall_curve(straight_wall),
+		Some(wall_graph::WallCurve::Straight { .. })
+	));
+}

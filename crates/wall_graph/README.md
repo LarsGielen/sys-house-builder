@@ -54,6 +54,11 @@ the walls joined at the host's ends. Opening IDs stay stable through ordinary ed
 its openings. Splits and merges keep an opening's world position; an insertion
 that would cut through or crowd an opening is rejected atomically.
 
+`move_nodes` and `bend_wall` reshape existing walls atomically, keeping node and opening
+IDs and reporting smooth joins they cannot keep; `smooth_joins` infers tangency from
+geometry, and the `arc_*` functions solve arcs from a bend, tangents, or a radius. See the
+geometry guide for the policy.
+
 After editing, `graph.optimize()` rebuilds the same geometry and connectivity
 with contiguous node and internal half-edge IDs. It returns a `WallGraphIdMap`
 that translates old node IDs and wall handles for objects that refer to the

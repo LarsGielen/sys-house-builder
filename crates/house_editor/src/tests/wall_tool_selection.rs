@@ -140,6 +140,7 @@ fn escape_wins_over_a_click_in_the_same_frame() {
 		})
 		.insert_resource(SelectedTarget(Some(SelectionTarget::Wall(wall))))
 		.init_resource::<HoveredTarget>()
+		.init_resource::<HoveredHandle>()
 		.add_systems(Update, update_selection);
 	app.update();
 

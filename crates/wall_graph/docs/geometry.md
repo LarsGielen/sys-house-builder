@@ -102,6 +102,48 @@ the graph is unchanged. `UnknownNode` and `SameNode`
 remain in the error type for the internal node-targeted insertion path but
 are not produced by the public position-based insertion methods.
 
+## Arc solvers
+
+`arc_through_bend`, `arc_tangent_at_start`, `arc_tangent_at_both`, and
+`arc_sweep_for_radius` turn drawing constraints into the signed sweep that
+`add_arc` takes. An arc leaves its start `sweep / 2` clockwise of the chord and
+arrives `sweep / 2` counterclockwise of it, so a tangent constraint is an angle
+comparison: one tangent gives `sweep = 2 * angle(direction, chord)`, and two
+tangents must agree on that angle or the request is `ArcError::InconsistentTangents`.
+A returned sweep of exactly `0.0` means the constraints describe a straight wall.
+A start tangent whose end lies directly behind it would need a full revolution and
+is rejected. `arc_points` samples a proposal that is not in the graph yet.
+
+## Smooth joins
+
+`smooth_joins` reports every pair of walls whose departures at a node are opposite
+within `1e-4` (sine of the angle). It is computed from geometry on each call; the graph
+stores no tangent flags, so a join cannot go stale.
+
+## Moving junctions and bending walls
+
+`move_nodes` and `bend_wall` change geometry in place and rebuild only the walls whose
+endpoints moved (or the bent wall) as one atomic operation: nodes, opening IDs, and
+the handles of every other wall are kept, and a failed call changes nothing. A node is
+shared topology, so moving it stretches every wall that ends there. A whole-wall drag
+moves its two nodes by the same offset; an endpoint or junction drag moves one.
+
+For rebuilt walls:
+
+| Wall | Result |
+| --- | --- |
+| Straight | Stays straight, keeping its other endpoint. |
+| Arc with a decided neighbour direction at an end | Re-solved to leave that end along the join's tangent. The neighbour is decided when its node did not move, or when it is a straight wall (its new direction is known). With two such ends the arc must satisfy both; when they disagree it keeps the end at an unmoved node. |
+| Arc with no decided neighbour, or no solution | Keeps its sweep, the smallest change to the original curve. |
+
+The `ReshapeReport` lists old to new wall handles and the nodes where a smooth join
+existed before and does not now, for display before the change is committed.
+Openings stay on their wall at the same fraction of its length, so stretching a wall
+stretches the gaps around them; the move is rejected if an opening then no longer fits.
+A move is also rejected (`CrossesWall`, `Overlapping`, or `TangentialContact`) if a
+rebuilt wall would cross, touch, or overlap another wall, or land on another node,
+because those layouts need an insertion that splits walls.
+
 ## Sampling and limits
 
 `sample_wall(wall, max_deviation)` returns ordered points including both
