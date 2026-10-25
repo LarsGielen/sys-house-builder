@@ -926,6 +926,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_headless"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_image"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2962,6 +2969,7 @@ name = "house_editor"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_headless",
  "house_document",
  "house_editor_core",
  "wall_graph",

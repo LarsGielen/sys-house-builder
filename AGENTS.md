@@ -41,3 +41,17 @@ index may organize larger suites into topic files under `src/tests/`.
 
 Follow the repository's established formatting configuration and run the
 workspace formatter after Rust changes.
+
+# Headless screenshots
+
+To see what the editor renders without a display, run the `screenshot` binary and open the
+PNG with the Read tool:
+
+```
+cargo run -p house_editor --bin screenshot -- --out <file>.png [--project <file>] [--size WxH] [--software]
+```
+
+`--software` renders on the CPU (llvmpipe), which is slower but byte-for-byte reproducible.
+Any other Bevy app can do the same through the `bevy_headless` crate; see
+`crates/bevy_headless/examples/cube.rs` for a minimal use. Write captures to a scratch
+directory, not the repository.
