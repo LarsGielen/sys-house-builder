@@ -12,27 +12,27 @@ use bevy::{
 };
 
 use crate::{
-	arc_fields::ArcFieldsPlugin,
-	edit::{OpeningProposal, WallProposal, propose_opening, propose_wall},
+	document::edit::{OpeningProposal, WallProposal, propose_opening, propose_wall},
+	document::history::HistoryPlugin,
+	document::house::House,
 	editor_schedule::EditorSchedulePlugin,
-	ground_pointer::GroundPointerPlugin,
-	history::HistoryPlugin,
-	house::House,
-	opening_fields::OpeningFieldsPlugin,
-	orbit_camera::{OrbitCamera, OrbitCameraPlugin},
-	snapping::SnappingPlugin,
-	text_fields::TextFieldsPlugin,
-	wall_fields::WallFieldsPlugin,
-	wall_render::WallRenderPlugin,
-	wall_tool_active::WallToolActivePlugin,
-	wall_tool_arc::WallToolArcPlugin,
-	wall_tool_delete::WallToolDeletePlugin,
-	wall_tool_drawing::WallToolDrawingPlugin,
-	wall_tool_edit_opening::WallToolEditOpeningPlugin,
-	wall_tool_edit_wall::WallToolEditWallPlugin,
-	wall_tool_handles::WallToolHandlesPlugin,
-	wall_tool_opening::WallToolOpeningPlugin,
-	wall_tool_selection::WallToolSelectionPlugin,
+	tools::active::WallToolActivePlugin,
+	tools::arc::WallToolArcPlugin,
+	tools::delete::WallToolDeletePlugin,
+	tools::drawing::WallToolDrawingPlugin,
+	tools::edit_opening::WallToolEditOpeningPlugin,
+	tools::edit_wall::WallToolEditWallPlugin,
+	tools::handles::WallToolHandlesPlugin,
+	tools::opening::WallToolOpeningPlugin,
+	tools::selection::WallToolSelectionPlugin,
+	ui::arc_fields::ArcFieldsPlugin,
+	ui::fields::TextFieldsPlugin,
+	ui::opening_fields::OpeningFieldsPlugin,
+	ui::wall_fields::WallFieldsPlugin,
+	viewport::ground_pointer::GroundPointerPlugin,
+	viewport::orbit_camera::{OrbitCamera, OrbitCameraPlugin},
+	viewport::snapping::SnappingPlugin,
+	viewport::wall_render::WallRenderPlugin,
 };
 
 /// The Bevy plugins and resources the editor's systems need, without any editor plugin, for
@@ -83,7 +83,7 @@ pub(crate) fn editor_app() -> App {
 			WallToolArcPlugin,
 			ArcFieldsPlugin,
 			WallToolHandlesPlugin,
-			crate::project::ProjectPlugin,
+			crate::document::project::ProjectPlugin,
 		))
 		.add_systems(PostUpdate, camera_system.in_set(CameraUpdateSystems));
 	let mut window = app
@@ -110,7 +110,7 @@ pub(crate) fn editor_ui_app() -> App {
 			bevy::picking::DefaultPickingPlugins,
 			bevy::text::TextPlugin,
 			bevy::ui::UiPlugin,
-			crate::editor_ui::EditorUiPlugin,
+			crate::ui::panel::EditorUiPlugin,
 		));
 	app
 }
@@ -135,7 +135,7 @@ pub(crate) fn house_with_wall(start: Vec2, end: Vec2) -> (House, wall_graph::Wal
 pub(crate) fn house_with_opening(
 	length: f32,
 	center_distance: f64,
-	category: crate::opening_category::OpeningCategory,
+	category: house_document::OpeningCategory,
 ) -> (House, wall_graph::Wall, wall_graph::OpeningId) {
 	let (mut house, wall) = house_with_wall(Vec2::ZERO, Vec2::new(length, 0.0));
 	house.commit(

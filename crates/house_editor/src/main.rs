@@ -1,60 +1,5 @@
-mod arc_fields;
-mod coordinates;
-mod edit;
-mod editor_schedule;
-mod editor_ui;
-mod ground_pointer;
-mod history;
-mod house;
-mod opening_area;
-mod opening_category;
-mod opening_fields;
-mod opening_snap;
-mod opening_ui;
-mod orbit_camera;
-mod project;
-mod project_file;
-mod project_io;
-mod project_ui;
-mod snapping;
-mod text_fields;
-mod unsaved_changes;
-mod wall_fields;
-mod wall_render;
-mod wall_tool_active;
-mod wall_tool_arc;
-mod wall_tool_delete;
-mod wall_tool_drawing;
-mod wall_tool_edit_opening;
-mod wall_tool_edit_wall;
-mod wall_tool_handles;
-mod wall_tool_opening;
-mod wall_tool_selection;
-mod wall_ui;
-
-use arc_fields::ArcFieldsPlugin;
 use bevy::prelude::*;
-use editor_schedule::EditorSchedulePlugin;
-use editor_ui::EditorUiPlugin;
-use ground_pointer::GroundPointerPlugin;
-use history::HistoryPlugin;
-use house::House;
-use opening_fields::OpeningFieldsPlugin;
-use orbit_camera::{OrbitCamera, OrbitCameraPlugin};
-use project::ProjectPlugin;
-use snapping::SnappingPlugin;
-use text_fields::TextFieldsPlugin;
-use wall_fields::WallFieldsPlugin;
-use wall_render::WallRenderPlugin;
-use wall_tool_active::WallToolActivePlugin;
-use wall_tool_arc::WallToolArcPlugin;
-use wall_tool_delete::WallToolDeletePlugin;
-use wall_tool_drawing::WallToolDrawingPlugin;
-use wall_tool_edit_opening::WallToolEditOpeningPlugin;
-use wall_tool_edit_wall::WallToolEditWallPlugin;
-use wall_tool_handles::WallToolHandlesPlugin;
-use wall_tool_opening::WallToolOpeningPlugin;
-use wall_tool_selection::WallToolSelectionPlugin;
+use house_editor::{HouseEditorPlugin, OrbitCamera};
 
 fn main() {
 	App::new()
@@ -68,32 +13,7 @@ fn main() {
 			close_when_requested: false,
 			..default()
 		}))
-		.add_plugins((
-			EditorSchedulePlugin,
-			EditorUiPlugin,
-			HistoryPlugin,
-			OrbitCameraPlugin,
-			WallRenderPlugin,
-			GroundPointerPlugin,
-			SnappingPlugin,
-			WallToolActivePlugin,
-			WallToolDrawingPlugin,
-			WallToolOpeningPlugin,
-			WallToolDeletePlugin,
-			WallToolSelectionPlugin,
-		))
-		.add_plugins((
-			WallToolEditOpeningPlugin,
-			WallToolEditWallPlugin,
-			TextFieldsPlugin,
-			OpeningFieldsPlugin,
-			WallFieldsPlugin,
-			WallToolArcPlugin,
-			ArcFieldsPlugin,
-			WallToolHandlesPlugin,
-			ProjectPlugin,
-		))
-		.init_resource::<House>()
+		.add_plugins(HouseEditorPlugin)
 		.add_systems(Startup, setup_scene)
 		.run();
 }
@@ -120,7 +40,3 @@ fn setup_scene(
 
 	commands.spawn((Camera3d::default(), OrbitCamera::default()));
 }
-
-#[cfg(test)]
-#[path = "tests/editor.rs"]
-mod tests;

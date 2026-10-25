@@ -2949,10 +2949,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
-name = "house_builder"
+name = "house_document"
 version = "0.1.0"
 dependencies = [
- "bevy",
+ "glam",
  "wall_graph",
  "wall_mesh",
 ]
@@ -2962,6 +2962,18 @@ name = "house_editor"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "house_document",
+ "house_editor_core",
+ "wall_graph",
+ "wall_mesh",
+]
+
+[[package]]
+name = "house_editor_core"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "house_document",
  "wall_graph",
  "wall_mesh",
 ]

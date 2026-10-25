@@ -6,15 +6,17 @@ use bevy::{
 };
 
 use crate::{
-	arc_fields::ArcFieldsSystems, editor_ui::EditorUiSystems, ground_pointer::GroundPointerSystems,
-	history::HistorySystems, opening_fields::OpeningFieldsSystems,
-	orbit_camera::OrbitCameraSystems, project::ProjectSystems, snapping::SnappingSystems,
-	text_fields::TextFieldsSystems, wall_fields::WallFieldsSystems, wall_render::WallRenderSystems,
-	wall_tool_active::WallToolActiveSystems, wall_tool_arc::WallToolArcSystems,
-	wall_tool_delete::WallToolDeleteSystems, wall_tool_drawing::WallToolDrawingSystems,
-	wall_tool_edit_opening::WallToolEditOpeningSystems,
-	wall_tool_edit_wall::WallToolEditWallSystems, wall_tool_handles::WallToolHandlesSystems,
-	wall_tool_opening::WallToolOpeningSystems, wall_tool_selection::WallToolSelectionSystems,
+	actions::settings::SettingsActionSystems, document::history::HistorySystems,
+	document::project::ProjectSystems, tools::active::WallToolActiveSystems,
+	tools::arc::WallToolArcSystems, tools::delete::WallToolDeleteSystems,
+	tools::drawing::WallToolDrawingSystems, tools::edit_opening::WallToolEditOpeningSystems,
+	tools::edit_wall::WallToolEditWallSystems, tools::handles::WallToolHandlesSystems,
+	tools::opening::WallToolOpeningSystems, tools::selection::WallToolSelectionSystems,
+	ui::arc_fields::ArcFieldsSystems, ui::fields::TextFieldsSystems,
+	ui::opening_fields::OpeningFieldsSystems, ui::panel::EditorUiSystems,
+	ui::wall_fields::WallFieldsSystems, viewport::ground_pointer::GroundPointerSystems,
+	viewport::orbit_camera::OrbitCameraSystems, viewport::snapping::SnappingSystems,
+	viewport::wall_render::WallRenderSystems,
 };
 
 /// Composes the plugins' own system sets into the house editor's frame sequence.
@@ -30,6 +32,7 @@ impl Plugin for EditorSchedulePlugin {
 		.configure_sets(
 			PostUpdate,
 			(
+				SettingsActionSystems,
 				ProjectSystems,
 				// Restoring first lets every tool see the restored house and its discarded gestures.
 				HistorySystems,

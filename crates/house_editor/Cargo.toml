@@ -5,5 +5,7 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "0.19.1", features = ["dynamic_linking"] }
+house_document = { path = "../house_document" }
+house_editor_core = { path = "../house_editor_core" }
 wall_graph = { path = "../wall_graph" }
 wall_mesh = { path = "../wall_mesh" }

@@ -1,5 +1,6 @@
 use crate::{
-	edit::EditPreview, ground_pointer::GroundPointer, house::House, snapping::SnappedPointer,
+	document::edit::EditPreview, document::house::House, viewport::ground_pointer::GroundPointer,
+	viewport::snapping::SnappedPointer,
 };
 use bevy::prelude::*;
 
@@ -42,7 +43,7 @@ fn picking_uses_current_camera_ancestors_and_markers_propagate_in_the_same_frame
 		.1
 		.translation();
 	assert!(
-		marker_position.distance(crate::coordinates::graph_to_bevy(
+		marker_position.distance(crate::viewport::coordinates::graph_to_bevy(
 			hit.graph_position.extend(0.0)
 		)) < 1e-4
 	);

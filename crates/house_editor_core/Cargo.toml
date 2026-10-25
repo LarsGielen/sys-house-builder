@@ -1,0 +1,10 @@
+[package]
+name = "house_editor_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+glam = "0.32"
+house_document = { path = "../house_document" }
+wall_graph = { path = "../wall_graph" }
+wall_mesh = { path = "../wall_mesh" }
