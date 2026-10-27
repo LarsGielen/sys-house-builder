@@ -6,6 +6,7 @@
 
 mod candidate;
 mod document;
+mod library;
 mod opening_category;
 mod project;
 
@@ -17,5 +18,6 @@ pub use candidate::{
 	propose_wall_dimensions, propose_wall_removal,
 };
 pub use document::House;
+pub use library::{HouseEntry, HouseLibrary, InvalidName, LibraryError, validate_name};
 pub use opening_category::{OpeningCategories, OpeningCategory};
 pub use project::io::{ProjectError, open_project, save_project};

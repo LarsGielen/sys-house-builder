@@ -10,6 +10,7 @@ use crate::{
 	actions::ActionSender,
 	actions::property::{PropertyAction, PropertyActionPlugin, discard_cancelled_draft},
 	input::{Action, ActionState, ActionsPlugin},
+	ui::theme,
 	viewport::ground_pointer::GroundPointer,
 };
 
@@ -83,19 +84,19 @@ pub fn field_row<F: Component>(label: &str, field: F) -> impl Bundle {
 	)
 }
 
-/// A wide field for a file path, which accepts any character.
-pub fn path_field<F: Component>(field: F) -> impl Bundle {
+/// A wide field for free text, which accepts any character.
+pub fn wide_text_field<F: Component>(field: F) -> impl Bundle {
 	(
 		field,
 		Node {
-			width: Val::Px(210.0),
+			width: Val::Px(190.0),
 			padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
 			border: UiRect::all(Val::Px(1.0)),
 			overflow: Overflow::clip(),
 			..default()
 		},
-		BorderColor::from(Color::srgb(0.5, 0.5, 0.6)),
-		BackgroundColor(Color::srgb(0.15, 0.15, 0.18)),
+		BorderColor::from(theme::PANEL_BORDER),
+		BackgroundColor(theme::FIELD),
 		EditableText {
 			visible_width: Some(28.0),
 			allow_newlines: false,
@@ -116,8 +117,8 @@ fn text_field<F: Component>(field: F) -> impl Bundle {
 			border: UiRect::all(Val::Px(1.0)),
 			..default()
 		},
-		BorderColor::from(Color::srgb(0.5, 0.5, 0.6)),
-		BackgroundColor(Color::srgb(0.15, 0.15, 0.18)),
+		BorderColor::from(theme::PANEL_BORDER),
+		BackgroundColor(theme::FIELD),
 		EditableText {
 			visible_width: Some(7.0),
 			allow_newlines: false,

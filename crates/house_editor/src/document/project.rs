@@ -1,13 +1,10 @@
-use house_document::{open_project, save_project};
+use house_document::{HouseLibrary, open_project, save_project};
 use house_editor_core::{
 	ProjectCommand, ProjectEffect, ProjectWorkflow, UnsavedChoice, needs_confirmation,
 };
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
-use bevy::{
-	app::AppExit, ecs::system::SystemParam, prelude::*, text::EditableText,
-	window::WindowCloseRequested,
-};
+use bevy::{app::AppExit, ecs::system::SystemParam, prelude::*, window::WindowCloseRequested};
 
 use crate::{
 	actions::ActionSender,
@@ -30,11 +27,13 @@ impl Plugin for ProjectPlugin {
 		EditorActionPlugin::ensure(app);
 		ActionsPlugin::ensure(app);
 		app.init_resource::<ProjectPath>()
+			.init_resource::<Houses>()
 			.init_resource::<ProjectStatus>()
 			.init_resource::<PendingReplacement>()
 			.init_resource::<SelectedTarget>()
 			.init_resource::<EditPreview>()
 			.init_resource::<EditNotice>()
+			.add_message::<OpenHouse>()
 			.add_message::<WindowCloseRequested>()
 			.add_message::<AppExit>()
 			.add_message::<DocumentRestored>()
@@ -47,11 +46,12 @@ impl Plugin for ProjectPlugin {
 	}
 }
 
-/// What the user asked to do with the project. Opening and saving use the path typed in the
-/// path field, or the project's own path when the field is empty.
+/// What the user asked to do with the project. Saving writes the open house's own file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectRequest {
+	/// Creates a house in the library and opens it.
 	New,
+	/// Only meaningful with a house to open, which arrives as [`OpenHouse`].
 	Open,
 	Save,
 	/// Leaving the editor.
@@ -61,6 +61,38 @@ pub enum ProjectRequest {
 /// The file the current document was opened from or last saved to.
 #[derive(Resource, Default)]
 pub struct ProjectPath(pub Option<PathBuf>);
+
+/// Opens the house stored in this file, after asking about unsaved changes.
+#[derive(Message, Clone, Debug, PartialEq, Eq)]
+pub struct OpenHouse(pub PathBuf);
+
+/// The folder of saved houses. `None` when the platform's data directory cannot be
+/// determined, which leaves nowhere to keep houses.
+#[derive(Resource, Default)]
+pub struct Houses(pub Option<HouseLibrary>);
+
+impl Houses {
+	/// `houses` in the application data directory.
+	pub fn in_data_directory() -> Self {
+		Self(data_directory().map(|directory| HouseLibrary::new(directory.join("houses"))))
+	}
+}
+
+#[cfg(windows)]
+fn data_directory() -> Option<PathBuf> {
+	env::var_os("APPDATA").map(|base| PathBuf::from(base).join("house_editor"))
+}
+
+/// Follows the XDG convention: `$XDG_DATA_HOME`, else `~/.local/share`. The specification says
+/// to ignore a relative `$XDG_DATA_HOME`.
+#[cfg(not(windows))]
+fn data_directory() -> Option<PathBuf> {
+	let base = env::var_os("XDG_DATA_HOME")
+		.map(PathBuf::from)
+		.filter(|path| path.is_absolute())
+		.or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))?;
+	Some(base.join("house_editor"))
+}
 
 /// The outcome of the last file action, including why it failed.
 #[derive(Resource, Default)]
@@ -104,44 +136,20 @@ impl From<ProjectCommand> for ProjectRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnsavedDecision(pub UnsavedChoice);
 
-/// Marks the text field that holds the project's file path.
-#[derive(Component)]
-pub struct PathField;
-
 #[derive(SystemParam)]
-struct Project<'w, 's> {
+struct Project<'w> {
 	house: ResMut<'w, House>,
 	path: ResMut<'w, ProjectPath>,
+	houses: Res<'w, Houses>,
 	status: ResMut<'w, ProjectStatus>,
 	selected: ResMut<'w, SelectedTarget>,
 	preview: ResMut<'w, EditPreview>,
 	notice: ResMut<'w, EditNotice>,
 	restored: MessageWriter<'w, DocumentRestored>,
 	exit: MessageWriter<'w, AppExit>,
-	path_field: Query<'w, 's, &'static mut EditableText, With<PathField>>,
 }
 
-impl Project<'_, '_> {
-	fn typed_path(&self) -> Option<PathBuf> {
-		self.path_field
-			.iter()
-			.map(|text| text.value().to_string())
-			.map(|text| text.trim().to_string())
-			.find(|text| !text.is_empty())
-			.map(PathBuf::from)
-	}
-
-	/// The typed path, or else the project's own.
-	fn target_path(&self) -> Option<PathBuf> {
-		self.typed_path().or_else(|| self.path.0.clone())
-	}
-
-	fn clear_path_field(&mut self) {
-		for mut text in &mut self.path_field {
-			text.editor_mut().set_text("");
-		}
-	}
-
+impl Project<'_> {
 	fn save_to(&mut self, path: PathBuf) -> bool {
 		match save_project(&path, self.house.committed()) {
 			Ok(()) => {
@@ -167,19 +175,20 @@ impl Project<'_, '_> {
 		self.restored.write(DocumentRestored);
 	}
 
-	fn handle_request(&mut self, pending: &mut PendingReplacement, request: ProjectRequest) {
-		let effect = pending.request(
-			request.into(),
-			self.target_path(),
-			needs_confirmation(&self.house),
-		);
+	fn handle_request(
+		&mut self,
+		pending: &mut PendingReplacement,
+		request: ProjectRequest,
+		open_path: Option<PathBuf>,
+	) {
+		let effect = pending.request(request.into(), open_path, needs_confirmation(&self.house));
 		if let Some(effect) = effect {
 			self.execute(effect);
 		}
 	}
 
 	fn handle_answer(&mut self, pending: &mut PendingReplacement, choice: UnsavedChoice) {
-		let effect = pending.answer(choice, self.path.0.clone(), self.typed_path());
+		let effect = pending.answer(choice, self.path.0.clone());
 		if let Some(effect) = effect {
 			self.execute(effect);
 		}
@@ -187,11 +196,11 @@ impl Project<'_, '_> {
 
 	fn execute(&mut self, effect: ProjectEffect) {
 		match effect {
-			ProjectEffect::Save => match self.target_path() {
+			ProjectEffect::Save => match self.path.0.clone() {
 				Some(path) => {
 					self.save_to(path);
 				}
-				None => self.status.0 = "Type a file path to save to".to_string(),
+				None => self.status.0 = "No house is open to save".to_string(),
 			},
 			ProjectEffect::Perform { command, open_path } => self.perform(command, open_path),
 			// A failed save must not be followed by the replacement it was meant to precede.
@@ -204,24 +213,33 @@ impl Project<'_, '_> {
 					self.perform(command, open_path);
 				}
 			}
-			ProjectEffect::AskForSavePath => {
-				self.clear_path_field();
-				self.status.0 =
-					"This project has no file yet: type where to save it, then choose Save"
-						.to_string();
+			ProjectEffect::MissingSavePath => {
+				self.status.0 = "No house is open to save".to_string();
 			}
 			ProjectEffect::MissingOpenPath => {
-				self.status.0 = "Type a file path to open".to_string();
+				self.status.0 = "Choose a house to open".to_string();
 			}
+		}
+	}
+
+	/// A new house is saved at once, so it is in the library and has a file to save to.
+	fn create_house(&mut self) {
+		let Some(library) = &self.houses.0 else {
+			self.status.0 = "There is nowhere to keep houses".to_string();
+			return;
+		};
+		match library.create_empty() {
+			Ok(entry) => {
+				self.status.0 = format!("Created {}", entry.name);
+				self.replace_document(EditCandidate::default(), Some(entry.path));
+			}
+			Err(error) => self.status.0 = error.to_string(),
 		}
 	}
 
 	fn perform(&mut self, command: ProjectCommand, open_path: Option<PathBuf>) {
 		match command {
-			ProjectCommand::New => {
-				self.replace_document(EditCandidate::default(), None);
-				self.status.0 = "Started a new project".to_string();
-			}
+			ProjectCommand::New => self.create_house(),
 			ProjectCommand::Open => {
 				let Some(path) = open_path else {
 					return;
@@ -256,25 +274,27 @@ fn request_close_on_window_close(
 /// cannot overtake the request that raised it.
 fn handle_project_requests(
 	mut stream: MessageReader<EditorAction>,
+	mut open_requests: MessageReader<OpenHouse>,
 	actions: Res<ActionState>,
 	mut pending: ResMut<PendingReplacement>,
 	mut project: Project,
 ) {
 	for action in stream.read().copied() {
 		match action {
-			EditorAction::Project(request) => project.handle_request(&mut pending, request),
+			EditorAction::Project(request) => project.handle_request(&mut pending, request, None),
 			EditorAction::Unsaved(UnsavedDecision(choice)) => {
 				project.handle_answer(&mut pending, choice);
 			}
 			_ => {}
 		}
 	}
+	for OpenHouse(path) in open_requests.read() {
+		project.handle_request(&mut pending, ProjectRequest::Open, Some(path.clone()));
+	}
 
 	// Shortcuts are this frame's device input, after anything already in the stream.
 	if actions.just_pressed(Action::Save) {
-		project.handle_request(&mut pending, ProjectRequest::Save);
-	} else if actions.just_pressed(Action::Open) {
-		project.handle_request(&mut pending, ProjectRequest::Open);
+		project.handle_request(&mut pending, ProjectRequest::Save, None);
 	}
 }
 

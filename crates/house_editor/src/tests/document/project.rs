@@ -4,6 +4,7 @@ use crate::{
 	editor_schedule::EditorSchedulePlugin,
 	tools::selection::SelectionTarget,
 };
+use house_document::HouseLibrary;
 use std::fs;
 
 /// A directory for one test's files, removed afterwards.
@@ -83,9 +84,15 @@ fn pending(app: &App) -> Option<ProjectRequest> {
 		.pending_request()
 }
 
-fn type_path(app: &mut App, path: &std::path::Path) {
-	app.world_mut()
-		.spawn((PathField, EditableText::new(path.to_str().unwrap())));
+fn open_house(app: &mut App, path: &std::path::Path) {
+	app.world_mut().write_message(OpenHouse(path.to_path_buf()));
+	app.update();
+}
+
+fn library_app(house: House, directory: &TestDirectory) -> App {
+	let mut app = project_app(house);
+	app.insert_resource(Houses(Some(HouseLibrary::new(directory.path("houses")))));
+	app
 }
 
 /// A saved project with `count` walls, to open from another app.
@@ -100,7 +107,7 @@ fn saving_writes_the_file_and_marks_the_document_clean() {
 	let directory = TestDirectory::new("save");
 	let path = directory.path("a.project");
 	let mut app = project_app(house_with_walls(2));
-	type_path(&mut app, &path);
+	app.world_mut().resource_mut::<ProjectPath>().0 = Some(path.clone());
 	assert!(app.world().resource::<House>().is_modified());
 
 	send(&mut app, ProjectRequest::Save);
@@ -122,22 +129,21 @@ fn a_failed_save_keeps_the_document_modified_and_says_why() {
 	let path = directory.path("a.project");
 	fs::create_dir(&path).unwrap();
 	let mut app = project_app(house_with_walls(1));
-	type_path(&mut app, &path);
+	app.world_mut().resource_mut::<ProjectPath>().0 = Some(path.clone());
 
 	send(&mut app, ProjectRequest::Save);
 
 	assert!(app.world().resource::<House>().is_modified());
 	assert!(status(&app).starts_with("Cannot save"), "{}", status(&app));
 	assert!(path.is_dir());
-	assert_eq!(app.world().resource::<ProjectPath>().0, None);
 }
 
 #[test]
-fn saving_without_a_path_asks_for_one() {
+fn saving_without_an_open_house_says_so_and_changes_nothing() {
 	let mut app = project_app(house_with_walls(1));
 	send(&mut app, ProjectRequest::Save);
 	assert!(app.world().resource::<House>().is_modified());
-	assert!(status(&app).contains("path"));
+	assert!(status(&app).contains("No house"));
 }
 
 #[test]
@@ -169,11 +175,10 @@ fn opening_replaces_the_document_history_selection_and_modified_state() {
 		.next()
 		.unwrap();
 	app.insert_resource(SelectedTarget(Some(SelectionTarget::Wall(wall))));
-	type_path(&mut app, &path);
 	// Saved first so that opening needs no question.
 	app.world_mut().resource_mut::<House>().mark_saved();
 
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &path);
 
 	assert_eq!(wall_count(&app), 3);
 	let house = app.world().resource::<House>();
@@ -201,9 +206,8 @@ fn a_rejected_import_preserves_geometry_history_and_modified_state() {
 	app.world_mut().resource_mut::<House>().redo();
 	let revision = app.world().resource::<House>().revision();
 	let modified = app.world().resource::<House>().is_modified();
-	type_path(&mut app, &broken);
 
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &broken);
 
 	let house = app.world().resource::<House>();
 	assert_eq!(house.revision(), revision);
@@ -227,10 +231,9 @@ fn opening_a_modified_project_asks_first_and_cancel_keeps_everything() {
 		.next()
 		.unwrap();
 	app.insert_resource(SelectedTarget(Some(SelectionTarget::Wall(wall))));
-	type_path(&mut app, &path);
 	let revision = app.world().resource::<House>().revision();
 
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &path);
 	assert_eq!(pending(&app), Some(ProjectRequest::Open));
 	assert_eq!(wall_count(&app), 2, "nothing is replaced before the answer");
 
@@ -250,8 +253,7 @@ fn discarding_opens_the_other_project() {
 	let directory = TestDirectory::new("discard");
 	let path = saved_project(&directory, "other.project", 3);
 	let mut app = project_app(house_with_walls(2));
-	type_path(&mut app, &path);
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &path);
 	decide(&mut app, UnsavedChoice::Discard);
 	assert_eq!(wall_count(&app), 3);
 	assert_eq!(pending(&app), None);
@@ -265,8 +267,7 @@ fn saving_first_writes_the_old_project_then_opens_the_other() {
 	let current = directory.path("current.project");
 	let mut app = project_app(house_with_walls(2));
 	app.world_mut().resource_mut::<ProjectPath>().0 = Some(current.clone());
-	type_path(&mut app, &other);
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &other);
 
 	decide(&mut app, UnsavedChoice::Save);
 
@@ -298,15 +299,26 @@ fn a_failed_save_does_not_replace_the_document() {
 }
 
 #[test]
-fn a_new_project_starts_empty_and_clean_after_the_choice() {
-	let mut app = project_app(house_with_walls(2));
+fn a_new_house_is_saved_to_the_library_and_opened_empty_and_clean_after_the_choice() {
+	let directory = TestDirectory::new("new_house");
+	let mut app = library_app(house_with_walls(2), &directory);
 	send(&mut app, ProjectRequest::New);
 	assert_eq!(wall_count(&app), 2);
 	decide(&mut app, UnsavedChoice::Discard);
 	assert_eq!(wall_count(&app), 0);
 	let house = app.world().resource::<House>();
 	assert!(!house.is_modified() && !house.can_undo());
+	let path = app.world().resource::<ProjectPath>().0.clone().unwrap();
+	assert!(path.is_file());
+	assert_eq!(path.file_stem().unwrap(), "House 1");
+}
+
+#[test]
+fn a_new_house_needs_somewhere_to_keep_it() {
+	let mut app = project_app(House::default());
+	send(&mut app, ProjectRequest::New);
 	assert_eq!(app.world().resource::<ProjectPath>().0, None);
+	assert!(status(&app).contains("nowhere"));
 }
 
 #[test]
@@ -367,8 +379,7 @@ fn undo_history_after_opening_belongs_to_the_new_document() {
 	let directory = TestDirectory::new("history");
 	let path = saved_project(&directory, "other.project", 1);
 	let mut app = project_app(House::default());
-	type_path(&mut app, &path);
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &path);
 	let house = app.world().resource::<House>();
 	assert_eq!(house.graph().walls().count(), 1);
 	assert!(!house.can_undo());
@@ -381,41 +392,26 @@ fn saving_first_does_not_write_over_the_file_that_was_asked_for() {
 	let before = fs::read_to_string(&other).unwrap();
 	let mut app = project_app(house_with_walls(2));
 	app.world_mut().resource_mut::<ProjectPath>().0 = Some(directory.path("current.project"));
-	type_path(&mut app, &other);
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &other);
 	decide(&mut app, UnsavedChoice::Save);
 
 	assert_eq!(fs::read_to_string(&other).unwrap(), before);
 }
 
 #[test]
-fn an_unnamed_project_asks_where_to_save_before_opening_the_other_file() {
+fn saving_first_without_a_file_keeps_the_question_open() {
 	let directory = TestDirectory::new("unnamed_save_then_open");
 	let other = saved_project(&directory, "other.project", 3);
 	let before = fs::read_to_string(&other).unwrap();
 	let mut app = project_app(house_with_walls(2));
-	type_path(&mut app, &other);
-	send(&mut app, ProjectRequest::Open);
+	open_house(&mut app, &other);
 	decide(&mut app, UnsavedChoice::Save);
 
-	// Nothing was written or replaced, and the question stays open.
+	// Nothing was written or replaced, and the question stays open to discard or cancel.
 	assert_eq!(fs::read_to_string(&other).unwrap(), before);
 	assert_eq!(wall_count(&app), 2);
 	assert_eq!(pending(&app), Some(ProjectRequest::Open));
-	assert!(status(&app).contains("type where to save"));
-
-	let save_path = directory.path("new.project");
-	app.world_mut()
-		.query::<&mut EditableText>()
-		.single_mut(app.world_mut())
-		.unwrap()
-		.editor_mut()
-		.set_text(save_path.to_str().unwrap());
-	decide(&mut app, UnsavedChoice::Save);
-
-	assert!(fs::read_to_string(&save_path).unwrap().contains("wall w2"));
-	assert_eq!(wall_count(&app), 3);
-	assert_eq!(pending(&app), None);
+	assert!(status(&app).contains("No house"));
 }
 
 #[test]
@@ -458,7 +454,8 @@ fn an_answer_sent_before_its_question_is_ignored() {
 fn a_question_and_its_answer_in_one_frame_are_handled_in_order() {
 	use crate::actions::EditorAction;
 
-	let mut app = project_app(house_with_walls(2));
+	let directory = TestDirectory::new("one_frame");
+	let mut app = library_app(house_with_walls(2), &directory);
 	app.world_mut()
 		.write_message(EditorAction::from(ProjectRequest::New));
 	app.world_mut()

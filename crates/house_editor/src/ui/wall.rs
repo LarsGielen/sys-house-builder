@@ -12,7 +12,8 @@ use crate::{
 	tools::drawing::{StepDirection, WallDrawingSettings},
 	tools::edit_wall::{ConfirmWallDeletion, DeleteSelectedWall},
 	ui::arc_fields::arc_field_controls,
-	ui::panel::{ENABLED_BUTTON_COLOR, EditorUiSystems, step_button},
+	ui::panel::{EditorUiSystems, step_button},
+	ui::theme,
 };
 use bevy::prelude::*;
 use house_document::OpeningCategory;
@@ -118,9 +119,9 @@ fn update_arc_mode_controls(
 ) {
 	for (button, mut background) in &mut buttons {
 		let color = if button.0 == mode.0 {
-			Color::srgb(0.3, 0.45, 0.7)
+			theme::SELECTED
 		} else {
-			ENABLED_BUTTON_COLOR
+			theme::BUTTON
 		};
 		background.set_if_neq(BackgroundColor(color));
 	}

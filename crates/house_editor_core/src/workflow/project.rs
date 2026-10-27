@@ -15,7 +15,7 @@ pub enum ProjectCommand {
 /// What the host must do next. The workflow decides; the host owns files, widgets and exit.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectEffect {
-	/// Save to the typed path, or else the project's own.
+	/// Save to the project's own file.
 	Save,
 	/// Carry out a command now. `open_path` is the file an `Open` asked for.
 	Perform {
@@ -29,9 +29,9 @@ pub enum ProjectEffect {
 		command: ProjectCommand,
 		open_path: Option<PathBuf>,
 	},
-	/// An unnamed project must be told where to save. The host clears the path field, which
-	/// until now named the file to open, and the user answers again with a typed path.
-	AskForSavePath,
+	/// A save was chosen but the open document has no file. The question stays open, so the
+	/// user can still discard or cancel.
+	MissingSavePath,
 	/// An open was asked for with no file named.
 	MissingOpenPath,
 }
@@ -39,10 +39,8 @@ pub enum ProjectEffect {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Pending {
 	command: ProjectCommand,
-	/// Captured with the request, so answering never re-reads a path field that may by then
-	/// name the file to save.
+	/// Captured with the request, so answering does not depend on what is selected by then.
 	open_path: Option<PathBuf>,
-	awaiting_save_path: bool,
 }
 
 /// The unsaved-changes question around replacing or closing a document. While a question is
@@ -81,26 +79,20 @@ impl ProjectWorkflow {
 			_ => None,
 		};
 		if modified {
-			self.pending = Some(Pending {
-				command,
-				open_path,
-				awaiting_save_path: false,
-			});
+			self.pending = Some(Pending { command, open_path });
 			None
 		} else {
 			Some(ProjectEffect::Perform { command, open_path })
 		}
 	}
 
-	/// The user answered the open question. `project_path` is the document's own file, and
-	/// `typed_path` what the path field holds now.
+	/// The user answered the open question. `project_path` is the document's own file.
 	pub fn answer(
 		&mut self,
 		choice: UnsavedChoice,
 		project_path: Option<PathBuf>,
-		typed_path: Option<PathBuf>,
 	) -> Option<ProjectEffect> {
-		let pending = self.pending.as_mut()?;
+		self.pending.as_ref()?;
 		match choice.step() {
 			ReplacementStep::Keep => {
 				self.pending = None;
@@ -113,13 +105,8 @@ impl ProjectWorkflow {
 				Some(ProjectEffect::Perform { command, open_path })
 			}
 			ReplacementStep::SaveThenReplace => {
-				// The path field names the file to open until the project is asked where to
-				// save, so it cannot decide the destination before then.
-				let destination =
-					project_path.or(typed_path.filter(|_| pending.awaiting_save_path));
-				let Some(destination) = destination else {
-					pending.awaiting_save_path = true;
-					return Some(ProjectEffect::AskForSavePath);
+				let Some(destination) = project_path else {
+					return Some(ProjectEffect::MissingSavePath);
 				};
 				let Pending {
 					command, open_path, ..

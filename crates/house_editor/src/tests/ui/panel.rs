@@ -59,12 +59,6 @@ fn panel_sections_follow_the_tool_and_selection() {
 			.into_iter()
 			.collect();
 		assert_eq!(visible, expected, "tool {tool:?}, selection {selected:?}");
-		assert!(
-			app.world_mut()
-				.query::<&Text>()
-				.iter(app.world())
-				.any(|text| text.0.starts_with("Snap: "))
-		);
 	}
 }
 
@@ -97,7 +91,7 @@ fn small_windows_wrap_the_toolbar_and_allow_scrolling_the_panel() {
 	assert!(panel.1.content_size().y > panel.1.size().y);
 	let buttons: Vec<_> = app
 		.world_mut()
-		.query_filtered::<&UiGlobalTransform, With<ToolButton>>()
+		.query_filtered::<&UiGlobalTransform, With<crate::ui::dock::DockToolButton>>()
 		.iter(app.world())
 		.map(|transform| transform.translation)
 		.collect();

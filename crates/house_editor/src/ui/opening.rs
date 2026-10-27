@@ -1,11 +1,11 @@
 use crate::{
 	actions::ActionSender,
-	actions::settings::{SettingsAction, SettingsActionPlugin},
 	document::edit::{EditError, OpeningEditProposal, OpeningProposal},
 	document::house::House,
 	tools::edit_opening::{DeleteSelectedOpening, DuplicateSelectedOpening},
-	tools::opening::OpeningSettings,
-	ui::panel::{EditorUiSystems, step_button},
+	ui::icons::{Icon, Icons},
+	ui::panel::{EditorUiSystems, icon_button},
+	ui::theme,
 };
 use bevy::prelude::*;
 use house_document::OpeningCategory;
@@ -29,47 +29,11 @@ pub(super) fn describe_opening(house: &House, id: OpeningId) -> Option<String> {
 	))
 }
 
-#[derive(Component)]
-struct OpeningCategoryButton(OpeningCategory);
-
-#[derive(Component)]
-struct OpeningCategoryLabel;
-
 pub(super) fn category_name(category: OpeningCategory) -> &'static str {
 	match category {
 		OpeningCategory::Door => "Door",
 		OpeningCategory::Window => "Window",
 	}
-}
-
-pub(super) fn opening_controls() -> impl Bundle {
-	(
-		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
-			..default()
-		},
-		children![
-			(Text::new(""), OpeningCategoryLabel),
-			(
-				Node {
-					flex_direction: FlexDirection::Row,
-					column_gap: Val::Px(8.0),
-					..default()
-				},
-				children![
-					(
-						step_button(category_name(OpeningCategory::Door)),
-						OpeningCategoryButton(OpeningCategory::Door)
-					),
-					(
-						step_button(category_name(OpeningCategory::Window)),
-						OpeningCategoryButton(OpeningCategory::Window)
-					),
-				],
-			),
-		],
-	)
 }
 
 #[derive(Clone, Copy)]
@@ -81,30 +45,34 @@ enum OpeningCommand {
 #[derive(Component)]
 struct OpeningCommandButton(OpeningCommand);
 
-pub(super) fn opening_edit_controls() -> impl Bundle {
+pub(super) fn opening_edit_controls(icons: &Icons) -> impl Bundle {
 	(
 		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
+			column_gap: Val::Px(8.0),
 			..default()
 		},
-		children![(
-			Node {
-				flex_direction: FlexDirection::Row,
-				column_gap: Val::Px(8.0),
-				..default()
-			},
-			children![
-				(
-					step_button("Duplicate"),
-					OpeningCommandButton(OpeningCommand::Duplicate)
+		children![
+			(
+				icon_button(
+					icons,
+					Icon::Duplicate,
+					Some("Duplicate"),
+					theme::BUTTON,
+					theme::TEXT
 				),
-				(
-					step_button("Delete"),
-					OpeningCommandButton(OpeningCommand::Delete)
+				OpeningCommandButton(OpeningCommand::Duplicate)
+			),
+			(
+				icon_button(
+					icons,
+					Icon::Delete,
+					Some("Delete"),
+					theme::BUTTON,
+					theme::TEXT
 				),
-			],
-		),],
+				OpeningCommandButton(OpeningCommand::Delete)
+			),
+		],
 	)
 }
 
@@ -125,24 +93,6 @@ fn request_opening_command(
 			}
 		}
 	}
-}
-
-fn request_opening_category(
-	buttons: Query<(&Interaction, &OpeningCategoryButton), Changed<Interaction>>,
-	mut actions: ActionSender,
-) {
-	for (interaction, button) in &buttons {
-		if *interaction == Interaction::Pressed {
-			actions.send(SettingsAction::SetOpeningCategory(button.0));
-		}
-	}
-}
-
-fn update_opening_category_label(
-	settings: Res<OpeningSettings>,
-	mut label: Single<&mut Text, With<OpeningCategoryLabel>>,
-) {
-	label.0 = format!("Opening type: {}", category_name(settings.category()));
 }
 
 pub(super) fn describe_opening_removal(
@@ -214,15 +164,8 @@ pub(super) fn describe_opening_proposal(
 }
 
 pub(super) fn register(app: &mut App) {
-	SettingsActionPlugin::ensure(app);
 	app.add_systems(
 		Update,
-		(request_opening_category, request_opening_command).in_set(EditorUiSystems::Settings),
-	)
-	.add_systems(
-		PostUpdate,
-		update_opening_category_label
-			.run_if(resource_changed::<OpeningSettings>)
-			.in_set(EditorUiSystems::Readouts),
+		request_opening_command.in_set(EditorUiSystems::Settings),
 	);
 }

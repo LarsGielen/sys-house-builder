@@ -51,12 +51,12 @@ fn an_open_without_a_file_is_refused_before_anything_is_asked() {
 fn cancel_forgets_the_question_and_discard_performs_the_captured_open() {
 	let mut workflow = ProjectWorkflow::default();
 	workflow.request(ProjectCommand::Open, Some(path("other")), true);
-	assert_eq!(workflow.answer(UnsavedChoice::Cancel, None, None), None);
+	assert_eq!(workflow.answer(UnsavedChoice::Cancel, None), None);
 	assert_eq!(workflow.pending(), None);
 
 	workflow.request(ProjectCommand::Open, Some(path("other")), true);
 	assert_eq!(
-		workflow.answer(UnsavedChoice::Discard, None, Some(path("typed"))),
+		workflow.answer(UnsavedChoice::Discard, None),
 		Some(ProjectEffect::Perform {
 			command: ProjectCommand::Open,
 			open_path: Some(path("other"))
@@ -69,11 +69,7 @@ fn saving_first_writes_to_the_projects_own_file_not_the_one_being_opened() {
 	let mut workflow = ProjectWorkflow::default();
 	workflow.request(ProjectCommand::Open, Some(path("other")), true);
 	assert_eq!(
-		workflow.answer(
-			UnsavedChoice::Save,
-			Some(path("current")),
-			Some(path("other"))
-		),
+		workflow.answer(UnsavedChoice::Save, Some(path("current"))),
 		Some(ProjectEffect::SaveThenPerform {
 			destination: path("current"),
 			command: ProjectCommand::Open,
@@ -84,26 +80,18 @@ fn saving_first_writes_to_the_projects_own_file_not_the_one_being_opened() {
 }
 
 #[test]
-fn an_unnamed_project_asks_for_a_path_and_then_uses_the_typed_one() {
+fn saving_first_without_a_file_keeps_the_question_open() {
 	let mut workflow = ProjectWorkflow::default();
 	workflow.request(ProjectCommand::Open, Some(path("other")), true);
 	assert_eq!(
-		workflow.answer(UnsavedChoice::Save, None, Some(path("other"))),
-		Some(ProjectEffect::AskForSavePath)
+		workflow.answer(UnsavedChoice::Save, None),
+		Some(ProjectEffect::MissingSavePath)
 	);
 	assert_eq!(workflow.pending(), Some(ProjectCommand::Open));
-	assert_eq!(
-		workflow.answer(UnsavedChoice::Save, None, Some(path("new"))),
-		Some(ProjectEffect::SaveThenPerform {
-			destination: path("new"),
-			command: ProjectCommand::Open,
-			open_path: Some(path("other"))
-		})
-	);
 }
 
 #[test]
 fn an_answer_with_no_question_open_does_nothing() {
 	let mut workflow = ProjectWorkflow::default();
-	assert_eq!(workflow.answer(UnsavedChoice::Discard, None, None), None);
+	assert_eq!(workflow.answer(UnsavedChoice::Discard, None), None);
 }

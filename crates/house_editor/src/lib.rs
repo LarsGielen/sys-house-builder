@@ -20,11 +20,13 @@ pub use config::interaction::InteractionConfig;
 pub use document::house::House;
 pub use input::{Action, ActionState, Bindings};
 pub use scene::setup_scene;
+pub use tools::active::{ActiveTool, Tool};
+pub use ui::library::Screen;
 pub use viewport::orbit_camera::OrbitCamera;
 
 use bevy::prelude::*;
 use document::history::HistoryPlugin;
-use document::project::ProjectPlugin;
+use document::project::{Houses, ProjectPlugin};
 use editor_schedule::EditorSchedulePlugin;
 use tools::active::WallToolActivePlugin;
 use tools::arc::WallToolArcPlugin;
@@ -77,7 +79,8 @@ impl Plugin for HouseEditorPlugin {
 			WallToolHandlesPlugin,
 			ProjectPlugin,
 		))
-		.init_resource::<House>();
+		.init_resource::<House>()
+		.insert_resource(Houses::in_data_directory());
 	}
 }
 

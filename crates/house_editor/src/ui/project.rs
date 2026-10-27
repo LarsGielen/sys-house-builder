@@ -4,11 +4,11 @@ use house_editor_core::UnsavedChoice;
 use crate::{
 	actions::ActionSender,
 	document::project::{
-		PathField, PendingReplacement, ProjectPath, ProjectRequest, ProjectStatus, UnsavedDecision,
+		PendingReplacement, ProjectPath, ProjectRequest, ProjectStatus, UnsavedDecision,
 	},
-	input::hints::hint,
-	ui::fields::path_field,
-	ui::panel::{EditorUiSystems, step_button},
+	ui::icons::{Icon, Icons, icon_image},
+	ui::panel::{EditorUiSystems, icon_button, pill, step_button},
+	ui::theme,
 };
 
 #[derive(Component)]
@@ -21,43 +21,68 @@ struct DecisionButton(UnsavedChoice);
 struct ProjectStatusReadout;
 
 #[derive(Component)]
+struct HouseNameReadout;
+
+#[derive(Component)]
 struct UnsavedPrompt;
 
 #[derive(Component)]
 struct UnsavedPromptText;
 
-pub(super) fn project_controls() -> impl Bundle {
+/// The app's title and the open house, shown at the left of the top bar.
+pub(super) fn project_file_controls(icons: &Icons) -> impl Bundle {
+	(
+		Node {
+			flex_direction: FlexDirection::Row,
+			align_items: AlignItems::Center,
+			column_gap: Val::Px(12.0),
+			..default()
+		},
+		children![
+			icon_image(icons, Icon::Home, 28.0),
+			(Text::new("House editor"), TextFont::from_font_size(20.0)),
+			(Text::new(""), HouseNameReadout),
+			crate::ui::library::library_button(icons),
+		],
+	)
+}
+
+pub(super) fn save_button(icons: &Icons) -> impl Bundle {
+	(
+		icon_button(
+			icons,
+			Icon::Save,
+			Some("Save"),
+			theme::ACCENT,
+			theme::TEXT_ON_ACCENT,
+		),
+		ProjectButton(ProjectRequest::Save),
+	)
+}
+
+/// File status and the question asked before unsaved changes are replaced.
+pub(super) fn project_notices() -> impl Bundle {
 	(
 		Node {
 			flex_direction: FlexDirection::Column,
+			align_items: AlignItems::Center,
 			row_gap: Val::Px(8.0),
 			..default()
 		},
 		children![
-			hint("Project file ({Save} saves, {Open} opens)"),
-			path_field(PathField),
-			(
-				Node {
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
-					row_gap: Val::Px(8.0),
-					column_gap: Val::Px(8.0),
-					..default()
-				},
-				children![
-					(step_button("New"), ProjectButton(ProjectRequest::New)),
-					(step_button("Open"), ProjectButton(ProjectRequest::Open)),
-					(step_button("Save"), ProjectButton(ProjectRequest::Save)),
-				],
-			),
-			(Text::new(""), ProjectStatusReadout),
+			(pill(""), ProjectStatusReadout),
 			(
 				Node {
 					display: Display::None,
 					flex_direction: FlexDirection::Column,
 					row_gap: Val::Px(8.0),
+					padding: UiRect::all(Val::Px(12.0)),
+					border: UiRect::all(Val::Px(1.0)),
+					border_radius: BorderRadius::all(theme::RADIUS),
 					..default()
 				},
+				BackgroundColor(theme::PANEL),
+				BorderColor::from(theme::PANEL_BORDER),
 				UnsavedPrompt,
 				children![
 					(Text::new("There are unsaved changes."), UnsavedPromptText),
@@ -106,18 +131,31 @@ fn decide_unsaved(
 	}
 }
 
+type PromptTextFilter = (
+	With<UnsavedPromptText>,
+	Without<ProjectStatusReadout>,
+	Without<HouseNameReadout>,
+);
+
 fn update_project_readouts(
 	status: Res<ProjectStatus>,
 	path: Res<ProjectPath>,
 	pending: Res<PendingReplacement>,
 	mut readout: Single<&mut Text, With<ProjectStatusReadout>>,
+	mut house_name: Single<&mut Text, (With<HouseNameReadout>, Without<ProjectStatusReadout>)>,
 	mut prompt: Single<(&mut Node, &Children), With<UnsavedPrompt>>,
-	mut prompt_text: Single<&mut Text, (With<UnsavedPromptText>, Without<ProjectStatusReadout>)>,
+	mut prompt_text: Single<&mut Text, PromptTextFilter>,
 ) {
-	let description = match (&status.0[..], &path.0) {
-		("", Some(path)) => format!("File: {}", path.display()),
-		(message, _) => message.to_string(),
-	};
+	let name = path
+		.0
+		.as_deref()
+		.and_then(|path| path.file_stem())
+		.map(|name| name.to_string_lossy().into_owned())
+		.unwrap_or_default();
+	if house_name.0 != name {
+		house_name.0 = name;
+	}
+	let description = status.0.clone();
 	// Writing identical text would still trigger a text layout every frame.
 	if readout.0 != description {
 		readout.0 = description;
@@ -125,8 +163,8 @@ fn update_project_readouts(
 
 	let (display, question) = match pending.pending_request() {
 		None => (Display::None, ""),
-		Some(ProjectRequest::New) => (Display::Flex, "Unsaved changes. Start a new project?"),
-		Some(ProjectRequest::Open) => (Display::Flex, "Unsaved changes. Open another project?"),
+		Some(ProjectRequest::New) => (Display::Flex, "Unsaved changes. Create a new house?"),
+		Some(ProjectRequest::Open) => (Display::Flex, "Unsaved changes. Open another house?"),
 		Some(ProjectRequest::Close) => (Display::Flex, "Unsaved changes. Close the editor?"),
 		Some(ProjectRequest::Save) => (Display::None, ""),
 	};
@@ -138,10 +176,27 @@ fn update_project_readouts(
 	}
 }
 
+/// How long a file message stays after the file action that caused it.
+const STATUS_SECONDS: f32 = 4.0;
+
+/// Clears the status message once it has been shown for a while, so a past save does not stay
+/// on screen for the rest of the session.
+fn expire_status(
+	time: Res<Time>,
+	mut status: ResMut<ProjectStatus>,
+	mut shown: Local<(String, f32)>,
+) {
+	if status.0 != shown.0 {
+		*shown = (status.0.clone(), time.elapsed_secs());
+	} else if !status.0.is_empty() && time.elapsed_secs() - shown.1 >= STATUS_SECONDS {
+		status.0.clear();
+	}
+}
+
 pub(super) fn register(app: &mut App) {
 	app.add_systems(
 		Update,
-		(request_project, decide_unsaved).in_set(EditorUiSystems::Settings),
+		(request_project, decide_unsaved, expire_status).in_set(EditorUiSystems::Settings),
 	)
 	.add_systems(
 		PostUpdate,

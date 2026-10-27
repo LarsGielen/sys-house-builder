@@ -6,13 +6,14 @@ use crate::{
 	document::edit::{EditNotice, EditPreview, PreviewState, Proposal},
 	document::history::HistoryRequest,
 	document::house::House,
-	input::hints::hint,
 	input::{ActionState, ActionsPlugin, Bindings, SCROLL_PIXELS_PER_LINE},
-	tools::active::{ActivateTool, ActiveTool, Tool},
+	tools::active::{ActiveTool, Tool},
 	tools::selection::{SelectedTarget, SelectionTarget},
+	ui::icons::{Icon, Icons, icon_image},
 	ui::opening_fields::{opening_field_controls, snap_gap_control},
+	ui::theme,
 	ui::wall_fields::wall_field_controls,
-	viewport::snapping::{SnapSettings, SnapSource, SnapTarget, SnappedPointer, snapping_disabled},
+	viewport::snapping::SnapSettings,
 };
 use bevy::{
 	input_focus::InputFocus,
@@ -20,8 +21,9 @@ use bevy::{
 	ui::{FocusPolicy, RelativeCursorPosition},
 };
 
-pub(crate) const ENABLED_BUTTON_COLOR: Color = Color::srgb(0.25, 0.25, 0.3);
-const DISABLED_BUTTON_COLOR: Color = Color::srgb(0.15, 0.15, 0.17);
+/// Height of the top bar, which the floating panels sit below.
+const TOP_BAR_HEIGHT: f32 = 56.0;
+const FLOATING_MARGIN: f32 = 12.0;
 
 pub struct EditorUiPlugin;
 
@@ -39,29 +41,26 @@ impl Plugin for EditorUiPlugin {
 		crate::ui::opening::register(app);
 		crate::ui::wall::register(app);
 		crate::ui::project::register(app);
+		crate::ui::library::register(app);
+		crate::ui::icons::register(app);
+		crate::ui::dock::register(app);
 		app.add_systems(Startup, setup_editor_panel)
 			.add_systems(
 				Update,
-				(
-					step_grid_spacing,
-					scroll_editor_panel,
-					request_tool,
-					request_history,
-				)
+				(step_grid_spacing, scroll_editor_panel, request_history)
 					.in_set(EditorUiSystems::Settings),
 			)
 			.add_systems(
 				PostUpdate,
 				(
 					update_grid_spacing_label.run_if(resource_changed::<SnapSettings>),
-					update_snap_readout,
 					update_edit_readout,
 					crate::input::hints::fill_hints,
 					update_selection_readout,
 					update_history_controls,
 					update_notice_readout,
 					update_panel_sections,
-					update_active_tool_label.run_if(resource_changed::<ActiveTool>),
+					hide_empty_pills,
 				)
 					.in_set(EditorUiSystems::Readouts),
 			);
@@ -86,27 +85,74 @@ struct EditReadout;
 #[derive(Component)]
 struct NoticeReadout;
 
-fn setup_editor_panel(mut commands: Commands) {
+fn setup_editor_panel(mut commands: Commands, icons: Res<Icons>) {
+	commands.insert_resource(ClearColor(theme::VIEWPORT));
+	commands.spawn((
+		Name::new("top-bar"),
+		chrome_bar(),
+		Node {
+			position_type: PositionType::Absolute,
+			top: Val::Px(0.0),
+			left: Val::Px(0.0),
+			width: Val::Percent(100.0),
+			height: Val::Px(TOP_BAR_HEIGHT),
+			padding: UiRect::horizontal(Val::Px(16.0)),
+			align_items: AlignItems::Center,
+			justify_content: JustifyContent::SpaceBetween,
+			..default()
+		},
+		children![
+			crate::ui::project::project_file_controls(&icons),
+			(
+				Node {
+					align_items: AlignItems::Center,
+					column_gap: Val::Px(8.0),
+					..default()
+				},
+				children![
+					(
+						icon_button(&icons, Icon::Undo, None, theme::BUTTON, theme::TEXT),
+						HistoryButton(HistoryRequest::Undo)
+					),
+					(
+						icon_button(&icons, Icon::Redo, None, theme::BUTTON, theme::TEXT),
+						HistoryButton(HistoryRequest::Redo)
+					),
+					(Text::new(""), DocumentReadout),
+					crate::ui::project::save_button(&icons),
+				],
+			),
+		],
+	));
+
+	commands.spawn((
+		Name::new("grid-bar"),
+		floating_panel(),
+		Node {
+			position_type: PositionType::Absolute,
+			top: Val::Px(TOP_BAR_HEIGHT + FLOATING_MARGIN),
+			left: Val::Px(FLOATING_MARGIN),
+			..floating_node()
+		},
+		children![grid_controls(&icons)],
+	));
+
 	commands.spawn((
 		Name::new("editor-panel"),
 		EditorPanel,
+		floating_panel(),
 		Node {
 			position_type: PositionType::Absolute,
-			left: Val::Px(0.0),
-			top: Val::Px(0.0),
-			width: Val::Px(240.0),
+			top: Val::Px(TOP_BAR_HEIGHT + FLOATING_MARGIN),
+			right: Val::Px(FLOATING_MARGIN),
+			width: Val::Px(280.0),
 			max_width: Val::Percent(100.0),
-			height: Val::Percent(100.0),
-			padding: UiRect::all(Val::Px(12.0)),
+			max_height: Val::Percent(60.0),
 			overflow: Overflow::scroll_y(),
-			..default()
+			..floating_node()
 		},
 		ScrollPosition::default(),
 		RelativeCursorPosition::default(),
-		BackgroundColor(Color::srgba(0.1, 0.1, 0.12, 0.9)),
-		// Interaction makes the panel block viewport picking, including its blank space.
-		Interaction::default(),
-		FocusPolicy::Block,
 		children![(
 			Node {
 				width: Val::Percent(100.0),
@@ -116,18 +162,10 @@ fn setup_editor_panel(mut commands: Commands) {
 				..default()
 			},
 			children![
-				crate::ui::project::project_controls(),
-				tool_controls(),
-				history_controls(),
-				snap_controls(),
-				(Text::new(""), EditReadout),
-				(Text::new(""), NoticeReadout),
+				(Text::new(""), SelectionReadout),
 				section(PanelSection::WallDrawing, wall_ui::wall_drawing_controls()),
 				section(PanelSection::ArcDrawing, wall_ui::arc_drawing_controls()),
-				section(
-					PanelSection::OpeningPlacement,
-					opening_ui::opening_controls()
-				),
+				section(PanelSection::OpeningPlacement, snap_gap_control()),
 				section(
 					PanelSection::SelectedOpening,
 					(
@@ -137,7 +175,7 @@ fn setup_editor_panel(mut commands: Commands) {
 							..default()
 						},
 						children![
-							opening_ui::opening_edit_controls(),
+							opening_ui::opening_edit_controls(&icons),
 							opening_field_controls()
 						],
 					)
@@ -156,6 +194,73 @@ fn setup_editor_panel(mut commands: Commands) {
 			],
 		)],
 	));
+
+	// Not blocking the viewport: only the pills themselves are visible, and they are not
+	// clickable.
+	commands.spawn((
+		Name::new("status-line"),
+		Node {
+			position_type: PositionType::Absolute,
+			bottom: Val::Px(DOCK_HEIGHT + FLOATING_MARGIN),
+			left: Val::Px(0.0),
+			width: Val::Percent(100.0),
+			flex_direction: FlexDirection::Column,
+			align_items: AlignItems::Center,
+			row_gap: Val::Px(8.0),
+			..default()
+		},
+		children![
+			crate::ui::project::project_notices(),
+			(pill(""), NoticeReadout),
+			(pill(""), EditReadout),
+		],
+	));
+
+	commands.spawn((
+		Name::new("tool-dock"),
+		chrome_bar(),
+		Node {
+			position_type: PositionType::Absolute,
+			bottom: Val::Px(0.0),
+			left: Val::Px(0.0),
+			width: Val::Percent(100.0),
+			min_height: Val::Px(DOCK_HEIGHT),
+			padding: UiRect::all(Val::Px(FLOATING_MARGIN)),
+			..default()
+		},
+		children![crate::ui::dock::dock_controls(&icons)],
+	));
+}
+
+const DOCK_HEIGHT: f32 = 120.0;
+
+/// Top bar and dock: solid, and blocks the viewport behind it.
+fn chrome_bar() -> impl Bundle {
+	(
+		BackgroundColor(theme::CHROME),
+		// Interaction makes the bar block viewport picking, including its blank space.
+		Interaction::default(),
+		FocusPolicy::Block,
+	)
+}
+
+/// A rounded panel floating over the viewport, which it blocks like the bars do.
+fn floating_panel() -> impl Bundle {
+	(
+		BackgroundColor(theme::PANEL),
+		BorderColor::from(theme::PANEL_BORDER),
+		Interaction::default(),
+		FocusPolicy::Block,
+	)
+}
+
+fn floating_node() -> Node {
+	Node {
+		padding: UiRect::all(Val::Px(12.0)),
+		border: UiRect::all(Val::Px(1.0)),
+		border_radius: BorderRadius::all(theme::RADIUS),
+		..default()
+	}
 }
 
 fn section(kind: PanelSection, contents: impl Bundle) -> impl Bundle {
@@ -173,11 +278,14 @@ fn section(kind: PanelSection, contents: impl Bundle) -> impl Bundle {
 fn update_panel_sections(
 	tool: Res<ActiveTool>,
 	selected: Res<SelectedTarget>,
-	mut sections: Query<(Entity, &PanelSection, &mut Node)>,
+	mut sections: Query<(Entity, &PanelSection, &mut Node), Without<EditorPanel>>,
+	mut panel: Single<&mut Node, With<EditorPanel>>,
 	parents: Query<&ChildOf>,
 	focus: Option<ResMut<InputFocus>>,
 ) {
 	let mut focus = focus;
+	// The properties panel only appears while one of its own sections has something to show.
+	let mut panel_has_content = false;
 	for (entity, section, mut node) in &mut sections {
 		let show = match section {
 			PanelSection::WallDrawing => tool.0 == Tool::DrawWall,
@@ -186,6 +294,7 @@ fn update_panel_sections(
 			PanelSection::SelectedOpening => tool.0 == Tool::Select && selected.opening().is_some(),
 			PanelSection::SelectedWall => tool.0 == Tool::Select && selected.wall().is_some(),
 		};
+		panel_has_content |= show;
 		let display = if show { Display::Flex } else { Display::None };
 		if node.display != display {
 			node.display = display;
@@ -200,6 +309,14 @@ fn update_panel_sections(
 				ancestor = parents.get(current).ok().map(ChildOf::parent);
 			}
 		}
+	}
+	let display = if panel_has_content {
+		Display::Flex
+	} else {
+		Display::None
+	};
+	if panel.display != display {
+		panel.display = display;
 	}
 }
 
@@ -222,73 +339,13 @@ fn scroll_editor_panel(
 }
 
 #[derive(Component)]
-struct ToolButton(Tool);
-
-#[derive(Component)]
 struct SelectionReadout;
-
-#[derive(Component)]
-struct ActiveToolLabel;
-
-fn tool_controls() -> impl Bundle {
-	(
-		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
-			..default()
-		},
-		children![
-			(Text::new(""), ActiveToolLabel),
-			(
-				Node {
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
-					row_gap: Val::Px(8.0),
-					column_gap: Val::Px(8.0),
-					..default()
-				},
-				children![
-					(step_button("Select"), ToolButton(Tool::Select)),
-					(step_button("Draw wall"), ToolButton(Tool::DrawWall)),
-					(step_button("Arc"), ToolButton(Tool::DrawArc)),
-					(step_button("Opening"), ToolButton(Tool::PlaceOpening)),
-					(step_button("Delete"), ToolButton(Tool::Delete)),
-				],
-			),
-			(Text::new(""), SelectionReadout),
-		],
-	)
-}
 
 #[derive(Component)]
 struct HistoryButton(HistoryRequest);
 
 #[derive(Component)]
 struct DocumentReadout;
-
-fn history_controls() -> impl Bundle {
-	(
-		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
-			..default()
-		},
-		children![
-			(
-				Node {
-					flex_direction: FlexDirection::Row,
-					column_gap: Val::Px(8.0),
-					..default()
-				},
-				children![
-					(step_button("Undo"), HistoryButton(HistoryRequest::Undo)),
-					(step_button("Redo"), HistoryButton(HistoryRequest::Redo)),
-				],
-			),
-			(Text::new(""), DocumentReadout),
-		],
-	)
-}
 
 fn request_history(
 	buttons: Query<(&Interaction, &HistoryButton), Changed<Interaction>>,
@@ -313,9 +370,9 @@ fn update_history_controls(
 			HistoryRequest::Redo => house.can_redo(),
 		};
 		let color = if available {
-			ENABLED_BUTTON_COLOR
+			theme::BUTTON
 		} else {
-			DISABLED_BUTTON_COLOR
+			theme::BUTTON_DISABLED
 		};
 		background.set_if_neq(BackgroundColor(color));
 	}
@@ -324,31 +381,6 @@ fn update_history_controls(
 	// Writing identical text would still trigger a text layout every frame.
 	if readout.0 != description {
 		readout.0 = description.to_string();
-	}
-}
-
-fn update_active_tool_label(
-	active_tool: Res<ActiveTool>,
-	mut label: Single<&mut Text, With<ActiveToolLabel>>,
-) {
-	label.0 = match active_tool.0 {
-		Tool::Select => "Tool: Select",
-		Tool::DrawWall => "Tool: Draw wall",
-		Tool::DrawArc => "Tool: Draw arc",
-		Tool::PlaceOpening => "Tool: Place opening",
-		Tool::Delete => "Tool: Delete",
-	}
-	.to_string();
-}
-
-fn request_tool(
-	buttons: Query<(&Interaction, &ToolButton), Changed<Interaction>>,
-	mut messages: ActionSender,
-) {
-	for (interaction, button) in &buttons {
-		if *interaction == Interaction::Pressed {
-			messages.send(ActivateTool(button.0));
-		}
 	}
 }
 
@@ -449,43 +481,30 @@ fn update_notice_readout(
 struct GridSpacingLabel;
 
 #[derive(Component)]
-struct SnapReadout;
-
-#[derive(Component)]
 struct GridSpacingStep(isize);
 
-fn snap_controls() -> impl Bundle {
+fn grid_controls(icons: &Icons) -> impl Bundle {
 	(
 		Node {
-			flex_direction: FlexDirection::Column,
-			row_gap: Val::Px(8.0),
+			align_items: AlignItems::Center,
+			column_gap: Val::Px(8.0),
 			..default()
 		},
 		children![
-			hint("Snap priority: junction, wall, grid. Hold {SuppressSnapping} to disable."),
-			snap_gap_control(),
-			(
-				Node {
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
-					row_gap: Val::Px(8.0),
-					align_items: AlignItems::Center,
-					column_gap: Val::Px(8.0),
-					..default()
-				},
-				children![
-					(Text::new(""), GridSpacingLabel),
-					grid_spacing_button("-", -1),
-					grid_spacing_button("+", 1),
-				],
-			),
-			(Text::new(""), SnapReadout),
+			icon_image(icons, Icon::Grid, 24.0),
+			Text::new("Grid"),
+			(Text::new(""), GridSpacingLabel),
+			grid_spacing_button(icons, Icon::Minus, -1),
+			grid_spacing_button(icons, Icon::Plus, 1),
 		],
 	)
 }
 
-fn grid_spacing_button(label: &str, step: isize) -> impl Bundle {
-	(step_button(label), GridSpacingStep(step))
+fn grid_spacing_button(icons: &Icons, icon: Icon, step: isize) -> impl Bundle {
+	(
+		icon_button(icons, icon, None, theme::BUTTON, theme::TEXT),
+		GridSpacingStep(step),
+	)
 }
 
 fn step_grid_spacing(
@@ -503,49 +522,104 @@ fn update_grid_spacing_label(
 	settings: Res<SnapSettings>,
 	mut label: Single<&mut Text, With<GridSpacingLabel>>,
 ) {
-	label.0 = format!("Grid: {} m", settings.grid_spacing());
+	label.0 = format!("{} m", settings.grid_spacing());
 }
 
-fn update_snap_readout(
-	snapped_pointer: Res<SnappedPointer>,
-	settings: Res<SnapSettings>,
-	actions: Res<ActionState>,
-	mut readout: Single<&mut Text, With<SnapReadout>>,
-) {
-	let description = match snapped_pointer.target {
-		None => "Snap: pointer is not on the ground".to_string(),
-		Some(SnapTarget { position, source }) => {
-			let source = match source {
-				SnapSource::Junction(_) => "junction".to_string(),
-				SnapSource::Wall(_) => "wall".to_string(),
-				SnapSource::Grid => format!("grid ({} m)", settings.grid_spacing()),
-				SnapSource::Free if snapping_disabled(&actions) => {
-					"free (snapping off)".to_string()
-				}
-				SnapSource::Free => "free".to_string(),
-			};
-			format!(
-				"Snap: {source}\nx {:.3} m, y {:.3} m",
-				position.x, position.y
-			)
-		}
-	};
+/// A text with a rounded backdrop that disappears while the text is empty.
+#[derive(Component)]
+pub(super) struct Pill;
 
-	// Writing identical text would still trigger a text layout every frame.
-	if readout.0 != description {
-		readout.0 = description;
+pub(super) fn pill(text: impl Into<String>) -> impl Bundle {
+	(
+		Text::new(text),
+		Pill,
+		Node {
+			padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+			border: UiRect::all(Val::Px(1.0)),
+			border_radius: BorderRadius::all(Val::Px(20.0)),
+			..default()
+		},
+		BackgroundColor(theme::PANEL),
+		BorderColor::from(theme::PANEL_BORDER),
+	)
+}
+
+fn hide_empty_pills(mut pills: Query<(&Text, &mut Node), With<Pill>>) {
+	for (text, mut node) in &mut pills {
+		let display = if text.0.is_empty() {
+			Display::None
+		} else {
+			Display::Flex
+		};
+		if node.display != display {
+			node.display = display;
+		}
 	}
 }
 
 pub(super) fn step_button(label: &str) -> impl Bundle {
+	button(label, theme::BUTTON, theme::TEXT)
+}
+
+/// The primary action of a bar, such as saving.
+pub(super) fn accent_button(label: &str) -> impl Bundle {
+	button(label, theme::ACCENT, theme::TEXT_ON_ACCENT)
+}
+
+fn button(label: &str, background: Color, text: Color) -> impl Bundle {
 	(
 		Button,
 		Node {
-			padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+			padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+			border_radius: BorderRadius::all(theme::RADIUS),
 			..default()
 		},
-		BackgroundColor(ENABLED_BUTTON_COLOR),
-		children![Text::new(label)],
+		BackgroundColor(background),
+		children![(Text::new(label), TextColor(text))],
+	)
+}
+
+/// A button showing an icon, and beside it a label unless it is `None`.
+pub(super) fn icon_button(
+	icons: &Icons,
+	icon: Icon,
+	label: Option<&str>,
+	background: Color,
+	content: Color,
+) -> impl Bundle {
+	(
+		Button,
+		Node {
+			padding: UiRect::axes(Val::Px(10.0), Val::Px(8.0)),
+			align_items: AlignItems::Center,
+			column_gap: Val::Px(8.0),
+			border_radius: BorderRadius::all(theme::RADIUS),
+			..default()
+		},
+		BackgroundColor(background),
+		children![
+			(
+				Node {
+					width: Val::Px(22.0),
+					height: Val::Px(22.0),
+					flex_shrink: 0.0,
+					..default()
+				},
+				ImageNode::new(icons.get(icon)).with_color(content),
+			),
+			(
+				Text::new(label.unwrap_or_default()),
+				TextColor(content),
+				Node {
+					display: if label.is_some() {
+						Display::Flex
+					} else {
+						Display::None
+					},
+					..default()
+				},
+			)
+		],
 	)
 }
 
