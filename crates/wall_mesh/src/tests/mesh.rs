@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, PI};
 
 use glam::{DVec3, Vec2};
-use wall_graph::{OpeningSpec, WallDimensions, WallGraph};
+use wall_graph::{OpeningSpec, Wall, WallDimensions, WallGraph};
 
 use crate::{MeshError, MeshSettings, Side, SurfaceKind, SurfaceSource, WallMesh, generate};
 
@@ -533,4 +533,73 @@ fn smooth_normals_follow_curved_faces() {
 			assert!(normal.dot(expected) > 0.9999);
 		}
 	}
+}
+
+/// Whether an opening spanning `start..end` passes both the graph and the mesh.
+fn opening_is_accepted(graph: &WallGraph, wall: Wall, start: f64, end: f64) -> bool {
+	let mut candidate = graph.clone();
+	candidate
+		.add_opening(
+			wall,
+			opening((start + end) / 2.0, (end - start) as f32, 0.0, 2.0),
+		)
+		.is_ok()
+		&& generate(&candidate, &FINE).is_ok()
+}
+
+#[test]
+fn opening_bounds_match_the_junction_errors_of_generate() {
+	let mut graph = WallGraph::new();
+	let wall = graph.add_wall(Vec2::ZERO, Vec2::new(4.0, 0.0)).unwrap()[0];
+	graph.add_wall(Vec2::ZERO, Vec2::new(0.0, 4.0)).unwrap();
+	graph
+		.add_wall(Vec2::new(4.0, 0.0), Vec2::new(4.0, 4.0))
+		.unwrap();
+
+	let bounds = crate::opening_bounds(&graph, wall, &FINE).unwrap();
+
+	// A square corner trims half the joined wall's thickness (0.1), plus the 0.05 pier.
+	assert!((bounds.start() - 0.15).abs() < 1e-6);
+	assert!((bounds.end() - 3.85).abs() < 1e-6);
+	assert!(opening_is_accepted(
+		&graph,
+		wall,
+		bounds.start() + 1e-4,
+		1.0
+	));
+	assert!(opening_is_accepted(&graph, wall, 1.0, bounds.end() - 1e-4));
+	assert!(!opening_is_accepted(
+		&graph,
+		wall,
+		bounds.start() - 0.01,
+		1.0
+	));
+	assert!(!opening_is_accepted(&graph, wall, 1.0, bounds.end() + 0.01));
+}
+
+#[test]
+fn mesh_bounds_reach_further_than_the_graph_clearance_at_a_sharp_corner() {
+	let mut graph = WallGraph::new();
+	let wall = graph.add_wall(Vec2::ZERO, Vec2::new(4.0, 0.0)).unwrap()[0];
+	graph.add_wall(Vec2::ZERO, Vec2::new(4.0, 0.5)).unwrap();
+
+	let graph_start = *graph.opening_bounds(wall).unwrap().start();
+	let mesh_start = *crate::opening_bounds(&graph, wall, &FINE).unwrap().start();
+	// The miter of a sharp corner reaches along the wall further than the graph's clearance.
+	assert!(mesh_start > graph_start);
+	assert!(opening_is_accepted(&graph, wall, mesh_start + 1e-4, 2.0));
+	assert!(!opening_is_accepted(&graph, wall, mesh_start - 0.01, 2.0));
+}
+
+#[test]
+fn opening_bounds_ignore_free_wall_ends_and_reject_stale_walls() {
+	let mut graph = WallGraph::new();
+	let wall = graph.add_wall(Vec2::ZERO, Vec2::new(4.0, 0.0)).unwrap()[0];
+	assert_eq!(crate::opening_bounds(&graph, wall, &FINE), Ok(0.0..=4.0));
+
+	graph.remove_wall(wall).unwrap();
+	assert_eq!(
+		crate::opening_bounds(&graph, wall, &FINE),
+		Err(MeshError::UnknownWall { wall })
+	);
 }

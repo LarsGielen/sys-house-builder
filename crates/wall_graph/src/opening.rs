@@ -20,5 +20,6 @@ pub struct Opening {
 	pub spec: OpeningSpec,
 }
 
-pub(crate) const MIN_OPENING_GAP: f64 = 0.02;
+/// The least horizontal gap, in metres, between two openings that overlap in height.
+pub const MIN_OPENING_GAP: f64 = 0.02;
 pub(crate) const CORNER_CLEARANCE: f64 = 0.05;

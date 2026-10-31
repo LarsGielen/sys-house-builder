@@ -271,3 +271,73 @@ fn an_angled_and_a_curved_junction_use_connected_wall_thickness() {
 	curved.add_opening(arc, spec(0.3, 0.1, 0.0, 2.0)).unwrap();
 	assert_consistent(&curved);
 }
+
+#[test]
+fn opening_bounds_cover_a_wall_with_free_ends() {
+	let mut graph = WallGraph::new();
+	let wall = graph.add_wall(Vec2::ZERO, Vec2::new(3.0, 0.0)).unwrap()[0];
+	assert_eq!(graph.opening_bounds(wall), Some(0.0..=3.0));
+}
+
+#[test]
+fn opening_bounds_follow_the_angle_of_the_joined_wall() {
+	let mut right_angle = WallGraph::new();
+	let host = right_angle
+		.add_wall(Vec2::ZERO, Vec2::new(3.0, 0.0))
+		.unwrap()[0];
+	right_angle
+		.add_wall(Vec2::ZERO, Vec2::new(0.0, 3.0))
+		.unwrap();
+	let bounds = right_angle.opening_bounds(host).unwrap();
+	// Half the joined wall's thickness plus the corner clearance.
+	assert!((bounds.start() - 0.15).abs() < 1e-3);
+	assert_eq!(*bounds.end(), 3.0);
+
+	let mut acute = WallGraph::new();
+	let host = acute.add_wall(Vec2::ZERO, Vec2::new(3.0, 0.0)).unwrap()[0];
+	acute.add_wall(Vec2::ZERO, Vec2::new(2.0, 2.0)).unwrap();
+	let bounds = acute.opening_bounds(host).unwrap();
+	assert!((bounds.start() - 0.15 / std::f64::consts::FRAC_PI_4.sin()).abs() < 1e-3);
+}
+
+#[test]
+fn openings_just_inside_the_bounds_are_accepted_and_just_outside_rejected() {
+	let mut graph = WallGraph::new();
+	let host = graph.add_wall(Vec2::ZERO, Vec2::new(3.0, 0.0)).unwrap()[0];
+	graph.add_wall(Vec2::ZERO, Vec2::new(2.0, 2.0)).unwrap();
+	graph
+		.add_wall(Vec2::new(3.0, 0.0), Vec2::new(3.0, 2.0))
+		.unwrap();
+	let bounds = graph.opening_bounds(host).unwrap();
+	let width = 0.5;
+	let at = |start: f64| spec(start + width as f64 / 2.0, width, 0.0, 2.0);
+
+	assert_eq!(
+		graph.add_opening(host, at(bounds.start() - 0.002)),
+		Err(WallError::OpeningTooCloseToJunction)
+	);
+	let end_start = bounds.end() - width as f64;
+	assert_eq!(
+		graph.add_opening(host, at(end_start + 0.002)),
+		Err(WallError::OpeningTooCloseToJunction)
+	);
+	graph
+		.add_opening(host, at(*bounds.start() + 0.002))
+		.unwrap();
+	graph.add_opening(host, at(end_start - 0.002)).unwrap();
+	assert_consistent(&graph);
+}
+
+#[test]
+fn opening_bounds_are_none_for_a_stale_handle_or_a_wall_with_no_clear_stretch() {
+	let mut graph = WallGraph::new();
+	let short = graph.add_wall(Vec2::ZERO, Vec2::new(0.2, 0.0)).unwrap()[0];
+	graph.add_wall(Vec2::ZERO, Vec2::new(0.0, 2.0)).unwrap();
+	graph
+		.add_wall(Vec2::new(0.2, 0.0), Vec2::new(0.2, 2.0))
+		.unwrap();
+	assert_eq!(graph.opening_bounds(short), None);
+
+	graph.remove_wall(short).unwrap();
+	assert_eq!(graph.opening_bounds(short), None);
+}

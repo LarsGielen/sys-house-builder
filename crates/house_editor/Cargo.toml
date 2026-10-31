@@ -1,0 +1,13 @@
+[package]
+name = "house_editor"
+version = "0.1.0"
+edition = "2024"
+default-run = "house_editor"
+
+[dependencies]
+bevy = { version = "0.19.1", features = ["dynamic_linking"] }
+bevy_headless = { path = "../bevy_headless" }
+house_document = { path = "../house_document" }
+house_editor_core = { path = "../house_editor_core" }
+wall_graph = { path = "../wall_graph" }
+wall_mesh = { path = "../wall_mesh" }

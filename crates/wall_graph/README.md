@@ -49,9 +49,15 @@ An opening belongs to one current wall piece. `add_opening` takes an `OpeningSpe
 with its center distance along the wall path, width, bottom elevation, and opening
 height, all in metres. `opening`, `openings`, and `opening_position` query them;
 `set_opening` and `remove_opening` edit them independently of the wall. Opening
-IDs stay stable through ordinary edits and `optimize`. A wall removal removes
+`opening_bounds` returns the path distances between which an opening keeps clear of
+the walls joined at the host's ends. Opening IDs stay stable through ordinary edits and `optimize`. A wall removal removes
 its openings. Splits and merges keep an opening's world position; an insertion
 that would cut through or crowd an opening is rejected atomically.
+
+`move_nodes` and `bend_wall` reshape existing walls atomically, keeping node and opening
+IDs and reporting smooth joins they cannot keep; `smooth_joins` infers tangency from
+geometry, and the `arc_*` functions solve arcs from a bend, tangents, or a radius. See the
+geometry guide for the policy.
 
 After editing, `graph.optimize()` rebuilds the same geometry and connectivity
 with contiguous node and internal half-edge IDs. It returns a `WallGraphIdMap`

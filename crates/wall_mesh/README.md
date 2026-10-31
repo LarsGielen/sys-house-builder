@@ -76,6 +76,9 @@ wall, node, or opening:
 - walls that overlap away from a junction;
 - limits that would be exceeded.
 
+`opening_bounds` returns the path distances between which a wall's openings avoid that
+junction error, so an editor can place or clamp an opening without trial meshes.
+
 The graph's own clearance rules measure opening distances along wall
 centerlines. A resolved miter can reach further, so an opening the graph accepts
 may still be rejected here.
