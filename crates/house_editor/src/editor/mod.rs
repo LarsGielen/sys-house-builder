@@ -5,20 +5,25 @@ use crate::{
 	editor::camera::{OrbitCamera, OrbitCameraPlugin},
 };
 
+mod action_handler;
+mod actions;
 mod camera;
 
-pub struct EditorPlugin;
+pub use actions::{ActionTrigger, EditorAction};
 
-#[derive(Resource)]
-pub struct ViewportCamera(pub Entity);
+pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(OrbitCameraPlugin);
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
 		app.add_systems(OnExit(AppState::Editor), remove_viewport_camera);
+		app.add_observer(action_handler::handle_action);
 	}
 }
+
+#[derive(Resource)]
+pub struct ViewportCamera(pub Entity);
 
 pub(crate) fn setup_editor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 	let render_target = images.add(Image::new_target_texture(

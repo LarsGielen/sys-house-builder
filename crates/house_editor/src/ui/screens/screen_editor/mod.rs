@@ -1,7 +1,10 @@
 use crate::{
 	app_state::AppState,
 	editor::{ViewportCamera, setup_editor},
-	ui::theme::{colors, spacing},
+	ui::{
+		icons::Icons,
+		theme::{colors, spacing},
+	},
 };
 
 use bevy::{input_focus::AutoFocus, prelude::*};
@@ -26,11 +29,15 @@ impl Plugin for EditorScreenPlugin {
 	}
 }
 
-fn spawn_editor_screen(mut commands: Commands, viewport_camera: Res<ViewportCamera>) {
-	commands.spawn_scene(editor_screen(viewport_camera.0));
+fn spawn_editor_screen(
+	mut commands: Commands,
+	viewport_camera: Res<ViewportCamera>,
+	icons: Res<Icons>,
+) {
+	commands.spawn_scene(editor_screen(viewport_camera.0, &icons));
 }
 
-fn editor_screen(camera: Entity) -> impl Scene + use<> {
+fn editor_screen(camera: Entity, icons: &Icons) -> impl Scene + use<> {
 	bsn! {
 		#EditorScreen
 		DespawnOnExit::<AppState>(AppState::Editor)
@@ -41,7 +48,7 @@ fn editor_screen(camera: Entity) -> impl Scene + use<> {
 		}
 		BackgroundColor(colors::BACKGROUND)
 		Children [
-			@top_bar()
+			@top_bar(icons)
 			AutoFocus
 			--
 			Node {

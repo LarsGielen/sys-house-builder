@@ -21,7 +21,6 @@ fn main() {
 			..default()
 		}))
 		.init_state::<app_state::AppState>()
-		.add_plugins(editor::EditorPlugin)
-		.add_plugins(ui::AppUiPlugin)
+		.add_plugins((editor::EditorPlugin, ui::AppUiPlugin))
 		.run();
 }
