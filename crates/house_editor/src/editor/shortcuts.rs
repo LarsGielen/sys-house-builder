@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
@@ -98,6 +98,40 @@ impl Shortcut {
 	}
 }
 
+/// Formats for display to the user, such as `Ctrl+Shift+Z`.
+impl fmt::Display for Shortcut {
+	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		for (is_held, name) in [
+			(self.ctrl, "Ctrl"),
+			(self.shift, "Shift"),
+			(self.alt, "Alt"),
+		] {
+			if is_held {
+				write!(formatter, "{name}+")?;
+			}
+		}
+
+		let key_name = KEY_NAMES
+			.iter()
+			.find(|(_, key)| *key == self.key)
+			.map(|(name, _)| *name);
+		match key_name {
+			Some(name) => {
+				let mut characters = name.chars();
+				let first = characters.next().map(|c| c.to_ascii_uppercase());
+				write!(
+					formatter,
+					"{}{}",
+					first.unwrap_or_default(),
+					characters.as_str()
+				)
+			}
+			// Unreachable for shortcuts parsed from text, but keeps Display total.
+			None => write!(formatter, "{:?}", self.key),
+		}
+	}
+}
+
 impl FromStr for Shortcut {
 	type Err = String;
 
@@ -153,6 +187,13 @@ impl Default for Keymap {
 }
 
 impl Keymap {
+	pub fn shortcuts_for(&self, action: EditorAction) -> impl Iterator<Item = &Shortcut> {
+		self.bindings
+			.iter()
+			.filter(move |(_, bound_action)| *bound_action == action)
+			.map(|(shortcut, _)| shortcut)
+	}
+
 	/// Reads the keymap from the assets folder, falling back to the built-in keymap if the file
 	/// is missing or invalid so that a broken file never leaves the editor without shortcuts.
 	fn load() -> Self {
@@ -236,6 +277,22 @@ mod tests {
 		assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
 		assert!("meta+z".parse::<Shortcut>().is_err());
 		assert!("ctrl+".parse::<Shortcut>().is_err());
+	}
+
+	#[test]
+	fn displays_shortcuts_for_the_user() {
+		let shortcut: Shortcut = "ctrl+shift+z".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "Ctrl+Shift+Z");
+
+		let shortcut: Shortcut = "f5".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "F5");
+	}
+
+	#[test]
+	fn finds_all_shortcuts_of_an_action() {
+		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		assert_eq!(keymap.shortcuts_for(EditorAction::Redo).count(), 2);
+		assert_eq!(keymap.shortcuts_for(EditorAction::None).count(), 0);
 	}
 
 	#[test]

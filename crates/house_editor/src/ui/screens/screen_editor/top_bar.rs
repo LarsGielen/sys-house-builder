@@ -27,15 +27,15 @@ pub(super) fn top_bar(icons: &Icons) -> impl Scene + use<> {
 			--
 			@separator_vertical()
 			--
-			@icon_button(EditorAction::Undo, icons.get(Icon::Undo), size, ButtonOptions { ..default() })
+			@icon_button(EditorAction::Undo, icons.get(Icon::Undo), size, ButtonOptions { hint: Some("Undo"), ..default() })
 			--
-			@icon_button(EditorAction::Redo, icons.get(Icon::Redo), size, ButtonOptions { ..default() })
+			@icon_button(EditorAction::Redo, icons.get(Icon::Redo), size, ButtonOptions { hint: Some("Redo"), ..default() })
 			--
 			@separator_vertical()
 			--
-			@icon_button(EditorAction::Save, icons.get(Icon::Save), size, ButtonOptions { ..default() })
+			@icon_button(EditorAction::Save, icons.get(Icon::Save), size, ButtonOptions { hint: Some("Save"), ..default() })
 			--
-			@icon_button(EditorAction::Open, icons.get(Icon::Open), size, ButtonOptions { ..default() })
+			@icon_button(EditorAction::Open, icons.get(Icon::Open), size, ButtonOptions { hint: Some("Open"), ..default() })
 		]
 	}
 }

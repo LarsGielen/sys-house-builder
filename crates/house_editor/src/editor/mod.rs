@@ -11,6 +11,7 @@ mod camera;
 mod shortcuts;
 
 pub use actions::{ActionTrigger, EditorAction};
+pub use shortcuts::Keymap;
 
 pub struct EditorPlugin;
 

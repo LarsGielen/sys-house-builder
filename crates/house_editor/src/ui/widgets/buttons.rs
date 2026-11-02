@@ -10,7 +10,10 @@ use bevy::{
 
 use crate::{
 	editor::{ActionTrigger, EditorAction},
-	ui::theme::{colors, editor_layout},
+	ui::{
+		theme::{colors, editor_layout},
+		widgets::tooltip::TooltipText,
+	},
 };
 
 pub(super) struct ButtonPlugin;
@@ -27,9 +30,6 @@ pub enum ButtonStyle {
 	Primary,
 	Outline,
 }
-
-#[derive(Component, Default, Clone)]
-pub struct Hint(pub Option<&'static str>);
 
 pub fn icon_image(icon: Handle<Image>, size: f32, color: Color) -> impl Scene {
 	bsn! {
@@ -55,7 +55,7 @@ pub fn button(action: EditorAction, options: ButtonOptions) -> impl Scene {
 		TabIndex(0)
 		EntityCursor::System(SystemCursorIcon::Pointer)
 		style
-		Hint(hint)
+		TooltipText(hint)
 		on(run_action_on_activate)
 		Node {
 			border: px(2),
