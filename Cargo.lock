@@ -3078,6 +3078,8 @@ name = "house_editor"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "serde",
+ "toml",
  "wall_graph",
  "wall_mesh",
 ]

@@ -8,6 +8,7 @@ use crate::{
 mod action_handler;
 mod actions;
 mod camera;
+mod shortcuts;
 
 pub use actions::{ActionTrigger, EditorAction};
 
@@ -15,7 +16,7 @@ pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(OrbitCameraPlugin);
+		app.add_plugins((OrbitCameraPlugin, shortcuts::ShortcutsPlugin));
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
 		app.add_systems(OnExit(AppState::Editor), remove_viewport_camera);
 		app.add_observer(action_handler::handle_action);

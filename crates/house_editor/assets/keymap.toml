@@ -1,0 +1,7 @@
+# Keyboard shortcuts. Each action maps to one or more shortcuts.
+# Modifiers: ctrl, shift, alt. A shortcut can be bound to only one action.
+[bindings]
+"editor.undo" = ["ctrl+z"]
+"editor.redo" = ["ctrl+shift+z", "ctrl+y"]
+"editor.save" = ["ctrl+s"]
+"editor.open" = ["ctrl+o"]
