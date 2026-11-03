@@ -4,7 +4,7 @@ mod buttons;
 mod general;
 mod tooltip;
 
-pub use buttons::{ButtonOptions, ButtonStyle, icon_button};
+pub use buttons::{ButtonOptions, icon_button};
 pub use general::separator_vertical;
 
 pub struct WidgetsPlugin;

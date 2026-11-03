@@ -1,3 +1,6 @@
+// The theme is a token palette; not every token is used by a widget yet.
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 
 pub mod colors {

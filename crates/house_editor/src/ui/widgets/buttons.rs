@@ -27,8 +27,8 @@ impl Plugin for ButtonPlugin {
 pub enum ButtonStyle {
 	#[default]
 	Chip,
-	Primary,
-	Outline,
+	// Primary,
+	// Outline,
 }
 
 pub fn icon_image(icon: Handle<Image>, size: f32, color: Color) -> impl Scene {
@@ -156,22 +156,21 @@ fn resolve_button_style(
 				Color::NONE
 			};
 			(Some(background), border)
-		}
-		ButtonStyle::Primary => {
-			let background = match (pressed, hovered) {
-				(true, _) => colors::ACCENT.mix(&Color::BLACK, 0.25),
-				(_, true) => colors::ACCENT.mix(&Color::WHITE, 0.2),
-				_ => colors::ACCENT,
-			};
-			(Some(background), Color::NONE)
-		}
-		ButtonStyle::Outline => {
-			let border = match (selected, hovered) {
-				(true, _) => colors::ACCENT,
-				(_, true) => colors::TEXT_FAINT,
-				_ => colors::BORDER,
-			};
-			(None, border)
-		}
+		} // ButtonStyle::Primary => {
+		  // 	let background = match (pressed, hovered) {
+		  // 		(true, _) => colors::ACCENT.mix(&Color::BLACK, 0.25),
+		  // 		(_, true) => colors::ACCENT.mix(&Color::WHITE, 0.2),
+		  // 		_ => colors::ACCENT,
+		  // 	};
+		  // 	(Some(background), Color::NONE)
+		  // }
+		  // ButtonStyle::Outline => {
+		  // 	let border = match (selected, hovered) {
+		  // 		(true, _) => colors::ACCENT,
+		  // 		(_, true) => colors::TEXT_FAINT,
+		  // 		_ => colors::BORDER,
+		  // 	};
+		  // 	(None, border)
+		  // }
 	}
 }
