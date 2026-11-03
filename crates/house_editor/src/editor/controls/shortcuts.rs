@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::controls::EditorAction;
+use crate::editor::controls::{CameraControl, EditorAction, action_definitions::BoundAction};
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
@@ -71,9 +71,71 @@ const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("right", KeyCode::ArrowRight),
 ];
 
+// Prefixed so they cannot collide with key names such as "left", which is the arrow key.
+const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
+	("mouse_left", MouseButton::Left),
+	("mouse_middle", MouseButton::Middle),
+	("mouse_right", MouseButton::Right),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShortcutInput {
+	Key(KeyCode),
+	Mouse(MouseButton),
+}
+
+impl ShortcutInput {
+	fn from_name(name: &str) -> Option<Self> {
+		let key = KEY_NAMES.iter().find(|(key_name, _)| *key_name == name);
+		let button = MOUSE_BUTTON_NAMES
+			.iter()
+			.find(|(button_name, _)| *button_name == name);
+		match (key, button) {
+			(Some((_, key)), _) => Some(Self::Key(*key)),
+			(None, Some((_, button))) => Some(Self::Mouse(*button)),
+			(None, None) => None,
+		}
+	}
+
+	fn name(&self) -> Option<&'static str> {
+		match self {
+			Self::Key(key) => KEY_NAMES
+				.iter()
+				.find(|(_, other)| other == key)
+				.map(|(name, _)| *name),
+			Self::Mouse(button) => MOUSE_BUTTON_NAMES
+				.iter()
+				.find(|(_, other)| other == button)
+				.map(|(name, _)| *name),
+		}
+	}
+
+	fn just_pressed(
+		&self,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> bool {
+		match self {
+			Self::Key(key) => keys.just_pressed(*key),
+			Self::Mouse(button) => mouse_buttons.just_pressed(*button),
+		}
+	}
+
+	fn pressed(
+		&self,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> bool {
+		match self {
+			Self::Key(key) => keys.pressed(*key),
+			Self::Mouse(button) => mouse_buttons.pressed(*button),
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shortcut {
-	key: KeyCode,
+	input: ShortcutInput,
 	ctrl: bool,
 	shift: bool,
 	alt: bool,
@@ -81,11 +143,25 @@ pub struct Shortcut {
 
 impl Shortcut {
 	// Modifiers must match exactly so that Ctrl+Shift+Z does not also fire the Ctrl+Z binding.
-	fn matches(&self, keys: &ButtonInput<KeyCode>) -> bool {
-		keys.just_pressed(self.key)
+	fn just_pressed(
+		&self,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> bool {
+		self.input.just_pressed(keys, mouse_buttons)
 			&& keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) == self.ctrl
 			&& keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) == self.shift
 			&& keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]) == self.alt
+	}
+
+	// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
+	// releasing one mid-drag must not end the drag.
+	fn input_held(
+		&self,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> bool {
+		self.input.pressed(keys, mouse_buttons)
 	}
 }
 
@@ -102,12 +178,10 @@ impl fmt::Display for Shortcut {
 			}
 		}
 
-		let key_name = KEY_NAMES
-			.iter()
-			.find(|(_, key)| *key == self.key)
-			.map(|(name, _)| *name);
-		match key_name {
+		match self.input.name() {
 			Some(name) => {
+				// "mouse_middle" is shown as "Mouse middle".
+				let name = name.replace('_', " ");
 				let mut characters = name.chars();
 				let first = characters.next().map(|c| c.to_ascii_uppercase());
 				write!(
@@ -118,7 +192,7 @@ impl fmt::Display for Shortcut {
 				)
 			}
 			// Unreachable for shortcuts parsed from text, but keeps Display total.
-			None => write!(formatter, "{:?}", self.key),
+			None => write!(formatter, "{:?}", self.input),
 		}
 	}
 }
@@ -133,14 +207,11 @@ impl FromStr for Shortcut {
 			.map(|token| token.trim().to_ascii_lowercase())
 			.collect();
 		let key_name = tokens.pop().unwrap_or_default();
-		let key = KEY_NAMES
-			.iter()
-			.find(|(name, _)| *name == key_name)
-			.map(|(_, key)| *key)
-			.ok_or_else(|| format!("unknown key \"{key_name}\" in \"{text}\""))?;
+		let input = ShortcutInput::from_name(&key_name)
+			.ok_or_else(|| format!("unknown key or mouse button \"{key_name}\" in \"{text}\""))?;
 
 		let mut shortcut = Self {
-			key,
+			input,
 			ctrl: false,
 			shift: false,
 			alt: false,
@@ -168,7 +239,7 @@ struct KeymapFile {
 
 #[derive(Resource)]
 pub struct Keymap {
-	bindings: Vec<(Shortcut, EditorAction)>,
+	bindings: Vec<(Shortcut, BoundAction)>,
 }
 
 impl Default for Keymap {
@@ -181,8 +252,37 @@ impl Keymap {
 	pub fn shortcuts_for(&self, action: EditorAction) -> impl Iterator<Item = &Shortcut> {
 		self.bindings
 			.iter()
-			.filter(move |(_, bound_action)| *bound_action == action)
+			.filter(move |(_, bound_action)| *bound_action == BoundAction::Editor(action))
 			.map(|(shortcut, _)| shortcut)
+	}
+
+	/// The camera control whose shortcut was pressed this frame, if any.
+	pub fn camera_control_pressed(
+		&self,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> Option<CameraControl> {
+		self.bindings
+			.iter()
+			.find_map(|(shortcut, bound_action)| match bound_action {
+				BoundAction::Camera(control) if shortcut.just_pressed(keys, mouse_buttons) => {
+					Some(*control)
+				}
+				_ => None,
+			})
+	}
+
+	/// Whether the input of any shortcut of the control is still down, regardless of modifiers.
+	pub fn camera_control_held(
+		&self,
+		control: CameraControl,
+		keys: &ButtonInput<KeyCode>,
+		mouse_buttons: &ButtonInput<MouseButton>,
+	) -> bool {
+		self.bindings.iter().any(|(shortcut, bound_action)| {
+			*bound_action == BoundAction::Camera(control)
+				&& shortcut.input_held(keys, mouse_buttons)
+		})
 	}
 
 	/// Reads the keymap from the assets folder, falling back to the built-in keymap if the file
@@ -214,9 +314,9 @@ impl Keymap {
 	fn parse(text: &str) -> Result<Self, String> {
 		let file: KeymapFile = toml::from_str(text).map_err(|error| error.to_string())?;
 
-		let mut bindings: Vec<(Shortcut, EditorAction)> = Vec::new();
+		let mut bindings: Vec<(Shortcut, BoundAction)> = Vec::new();
 		for (action_name, shortcut_texts) in file.bindings {
-			let action = EditorAction::from_name(&action_name)
+			let action = BoundAction::from_name(&action_name)
 				.ok_or_else(|| format!("unknown action \"{action_name}\""))?;
 			for shortcut_text in shortcut_texts {
 				let shortcut: Shortcut = shortcut_text
@@ -238,19 +338,25 @@ impl Keymap {
 
 pub(super) fn trigger_shortcuts(
 	keys: Res<ButtonInput<KeyCode>>,
+	mouse_buttons: Res<ButtonInput<MouseButton>>,
 	keymap: Res<Keymap>,
 	mut commands: Commands,
 ) {
-	// First match only: one key press must fire at most one action.
-	let Some((_, action)) = keymap
+	// First match only: one key press must fire at most one action. Camera controls are skipped
+	// because they are held rather than triggered.
+	let action = keymap
 		.bindings
 		.iter()
-		.find(|(shortcut, _)| shortcut.matches(&keys))
-	else {
-		return;
-	};
+		.find_map(|(shortcut, bound_action)| match bound_action {
+			BoundAction::Editor(action) if shortcut.just_pressed(&keys, &mouse_buttons) => {
+				Some(*action)
+			}
+			_ => None,
+		});
 
-	commands.trigger(*action);
+	if let Some(action) = action {
+		commands.trigger(action);
+	}
 }
 
 #[cfg(test)]
@@ -260,13 +366,13 @@ mod tests {
 	#[test]
 	fn built_in_keymap_is_valid() {
 		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
-		assert_eq!(keymap.bindings.len(), 5);
+		assert_eq!(keymap.bindings.len(), 7);
 	}
 
 	#[test]
 	fn shortcut_parsing_is_case_insensitive_and_checks_modifiers() {
 		let shortcut: Shortcut = "Ctrl+Shift+Z".parse().unwrap();
-		assert_eq!(shortcut.key, KeyCode::KeyZ);
+		assert_eq!(shortcut.input, ShortcutInput::Key(KeyCode::KeyZ));
 		assert!(shortcut.ctrl && shortcut.shift && !shortcut.alt);
 
 		assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
@@ -284,6 +390,68 @@ mod tests {
 	}
 
 	#[test]
+	fn parses_mouse_buttons_without_confusing_them_with_arrow_keys() {
+		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(shortcut.input, ShortcutInput::Mouse(MouseButton::Middle));
+		assert!(shortcut.shift);
+
+		let arrow: Shortcut = "ctrl+left".parse().unwrap();
+		assert_eq!(arrow.input, ShortcutInput::Key(KeyCode::ArrowLeft));
+
+		assert!("mouse_back".parse::<Shortcut>().is_err());
+	}
+
+	#[test]
+	fn displays_mouse_shortcuts_for_the_user() {
+		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "Shift+Mouse middle");
+	}
+
+	#[test]
+	fn mouse_shortcut_requires_exact_modifiers_when_pressed() {
+		let orbit: Shortcut = "mouse_middle".parse().unwrap();
+		let pan: Shortcut = "shift+mouse_middle".parse().unwrap();
+
+		let mut keys = ButtonInput::<KeyCode>::default();
+		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+		keys.press(KeyCode::ShiftLeft);
+		mouse_buttons.press(MouseButton::Middle);
+
+		assert!(pan.just_pressed(&keys, &mouse_buttons));
+		assert!(!orbit.just_pressed(&keys, &mouse_buttons));
+	}
+
+	#[test]
+	fn held_camera_control_ignores_modifiers() {
+		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		let keys = ButtonInput::<KeyCode>::default();
+		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+		mouse_buttons.press(MouseButton::Middle);
+
+		// Shift was released after the pan started, which must not end the drag.
+		assert!(keymap.camera_control_held(CameraControl::Pan, &keys, &mouse_buttons));
+		assert!(keymap.camera_control_held(CameraControl::Orbit, &keys, &mouse_buttons));
+	}
+
+	#[test]
+	fn finds_the_pressed_camera_control() {
+		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		let mut keys = ButtonInput::<KeyCode>::default();
+		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+		mouse_buttons.press(MouseButton::Middle);
+		assert_eq!(
+			keymap.camera_control_pressed(&keys, &mouse_buttons),
+			Some(CameraControl::Orbit)
+		);
+
+		keys.press(KeyCode::ShiftLeft);
+		assert_eq!(
+			keymap.camera_control_pressed(&keys, &mouse_buttons),
+			Some(CameraControl::Pan)
+		);
+	}
+
+	#[test]
 	fn finds_all_shortcuts_of_an_action() {
 		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
 		assert_eq!(keymap.shortcuts_for(EditorAction::Redo).count(), 2);
@@ -297,5 +465,8 @@ mod tests {
 
 		let conflict = "[bindings]\n\"editor.undo\" = [\"ctrl+z\"]\n\"editor.redo\" = [\"ctrl+z\"]";
 		assert!(Keymap::parse(conflict).is_err());
+
+		let camera_conflict = "[bindings]\n\"camera.orbit\" = [\"mouse_middle\"]\n\"camera.pan\" = [\"mouse_middle\"]";
+		assert!(Keymap::parse(camera_conflict).is_err());
 	}
 }
