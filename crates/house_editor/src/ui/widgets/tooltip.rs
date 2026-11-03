@@ -1,4 +1,4 @@
-use bevy::{picking::hover::Hovered, prelude::*};
+use bevy::{ecs::query::QueryData, picking::hover::Hovered, prelude::*};
 
 use crate::{
 	editor::{ActionTrigger, Keymap},
@@ -57,17 +57,20 @@ fn spawn_tooltip(mut commands: Commands) {
 	));
 }
 
+#[derive(QueryData)]
+struct TooltipQuery {
+	entity: Entity,
+	hovered: &'static Hovered,
+	text: &'static TooltipText,
+	action_trigger: Option<&'static ActionTrigger>,
+	computed_node: &'static ComputedNode,
+	ui_transform: &'static UiGlobalTransform,
+}
+
 fn update_tooltip(
 	time: Res<Time>,
 	keymap: Res<Keymap>,
-	targets: Query<(
-		Entity,
-		&Hovered,
-		&TooltipText,
-		Option<&ActionTrigger>,
-		&ComputedNode,
-		&UiGlobalTransform,
-	)>,
+	targets: Query<TooltipQuery>,
 	tooltip: Single<(&mut Node, &mut Text, &mut Visibility), With<Tooltip>>,
 	mut hover: Local<HoverTimer>,
 ) {
@@ -75,19 +78,19 @@ fn update_tooltip(
 
 	let hovered_target = targets
 		.iter()
-		.find(|(_, hovered, text, ..)| hovered.get() && text.0.is_some());
-	let Some((entity, _, tooltip_text, trigger, computed, transform)) = hovered_target else {
+		.find(|target| target.hovered.get() && target.text.0.is_some());
+	let Some(target) = hovered_target else {
 		*hover = HoverTimer::default();
 		visibility.set_if_neq(Visibility::Hidden);
 		return;
 	};
-	let Some(label) = tooltip_text.0 else {
+	let Some(label) = target.text.0 else {
 		return;
 	};
 
-	if hover.target != Some(entity) {
+	if hover.target != Some(target.entity) {
 		*hover = HoverTimer {
-			target: Some(entity),
+			target: Some(target.entity),
 			seconds: 0.0,
 		};
 	}
@@ -98,7 +101,9 @@ fn update_tooltip(
 	}
 
 	// Looked up on every show, so the hint follows the keymap if it ever changes at runtime.
-	let shortcut = trigger.and_then(|trigger| keymap.shortcuts_for(trigger.0).next());
+	let shortcut = target
+		.action_trigger
+		.and_then(|trigger| keymap.shortcuts_for(trigger.0).next());
 	let hint_text = match shortcut {
 		Some(shortcut) => format!("{label} ({shortcut})"),
 		None => label.to_string(),
@@ -108,8 +113,9 @@ fn update_tooltip(
 	}
 
 	// Layout values are in physical pixels while `Node` positions are logical.
+	let computed = target.computed_node;
 	let size = computed.size() * computed.inverse_scale_factor;
-	let top_left = transform.translation * computed.inverse_scale_factor - size / 2.0;
+	let top_left = target.ui_transform.translation * computed.inverse_scale_factor - size / 2.0;
 	let left = Val::Px(top_left.x);
 	let top = Val::Px(top_left.y + size.y + GAP_BELOW_BUTTON);
 	// Compared first so an unchanged tooltip does not trigger a relayout every frame.

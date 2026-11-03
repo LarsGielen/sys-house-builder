@@ -1,6 +1,6 @@
 use bevy::{picking::hover::Hovered, prelude::*, ui::RelativeCursorPosition};
 
-use crate::ui::theme::{colors, editor_layout, spacing};
+use crate::ui::theme::{colors, editor_layout};
 
 pub fn viewport_node(camera: Entity) -> impl Scene {
 	bsn! {

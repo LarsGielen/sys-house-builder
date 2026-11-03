@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::ui::theme::{colors, editor_layout, spacing};
+use crate::ui::theme::{colors, editor_layout};
 
 pub(super) fn dock() -> impl Scene + use<> {
 	bsn! {
