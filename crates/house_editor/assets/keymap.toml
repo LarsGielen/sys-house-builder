@@ -5,6 +5,7 @@
 "editor.redo" = ["ctrl+shift+z", "ctrl+y"]
 "editor.save" = ["ctrl+s"]
 "editor.open" = ["ctrl+o"]
+
 # Held controls. Modifiers only choose the control when it starts, so releasing one mid-drag keeps it going.
-"camera.orbit" = ["mouse_middle"]
-"camera.pan" = ["shift+mouse_middle"]
+"camera.orbit" = ["mouse_right"]
+"camera.pan" = ["shift+mouse_right"]

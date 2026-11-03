@@ -18,11 +18,15 @@ impl Plugin for ControlsPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_observer(action_handler::handle_action);
 		app.insert_resource(Keymap::load());
+		app.init_resource::<camera_controls::ActiveCameraDrag>();
 		app.add_systems(
 			Update,
 			(
 				shortcuts::trigger_shortcuts,
 				camera_controls::update_camera_controls,
+				camera_controls::update_cursor_lock
+					.after(camera_controls::update_camera_controls)
+					.run_if(resource_changed::<camera_controls::ActiveCameraDrag>),
 			)
 				.in_set(ControlsSystems),
 		);

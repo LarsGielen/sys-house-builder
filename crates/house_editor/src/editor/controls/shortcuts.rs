@@ -421,9 +421,12 @@ mod tests {
 		assert!(!orbit.just_pressed(&keys, &mouse_buttons));
 	}
 
+	// Fixed here instead of read from the built-in keymap, whose default bindings may change.
+	const CAMERA_KEYMAP: &str = "[bindings]\n\"camera.orbit\" = [\"mouse_middle\"]\n\"camera.pan\" = [\"shift+mouse_middle\"]";
+
 	#[test]
 	fn held_camera_control_ignores_modifiers() {
-		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		let keymap = Keymap::parse(CAMERA_KEYMAP).unwrap();
 		let keys = ButtonInput::<KeyCode>::default();
 		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
 		mouse_buttons.press(MouseButton::Middle);
@@ -435,7 +438,7 @@ mod tests {
 
 	#[test]
 	fn finds_the_pressed_camera_control() {
-		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		let keymap = Keymap::parse(CAMERA_KEYMAP).unwrap();
 		let mut keys = ButtonInput::<KeyCode>::default();
 		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
 		mouse_buttons.press(MouseButton::Middle);

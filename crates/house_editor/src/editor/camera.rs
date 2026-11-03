@@ -14,6 +14,7 @@ impl Plugin for OrbitCameraPlugin {
 
 #[derive(Component)]
 pub struct OrbitCamera {
+	focus: Vec3,
 	yaw: f32,
 	pitch: f32,
 	distance: f32,
@@ -22,6 +23,7 @@ pub struct OrbitCamera {
 impl Default for OrbitCamera {
 	fn default() -> Self {
 		Self {
+			focus: Vec3::new(0.0, 0.5, 0.0),
 			yaw: 0.6,
 			pitch: 0.6,
 			distance: 15.0,
@@ -30,7 +32,6 @@ impl Default for OrbitCamera {
 }
 
 impl OrbitCamera {
-	const FOCUS: Vec3 = Vec3::new(0.0, 0.5, 0.0);
 	const MIN_PITCH: f32 = 0.1;
 	const MAX_PITCH: f32 = 1.5;
 	const MIN_DISTANCE: f32 = 4.0;
@@ -45,10 +46,17 @@ impl OrbitCamera {
 		self.distance = (self.distance * factor).clamp(Self::MIN_DISTANCE, Self::MAX_DISTANCE);
 	}
 
+	pub fn pan(&mut self, right_amount: f32, forward_amount: f32) {
+		let yaw_rotation = Quat::from_rotation_y(self.yaw);
+		let right = yaw_rotation * Vec3::X;
+		let forward = yaw_rotation * Vec3::NEG_Z;
+		self.focus += (right * right_amount + forward * forward_amount) * self.distance;
+	}
+
 	fn transform(&self) -> Transform {
 		let rotation = Quat::from_euler(EulerRot::YXZ, self.yaw, -self.pitch, 0.0);
-		Transform::from_translation(Self::FOCUS + rotation * Vec3::Z * self.distance)
-			.looking_at(Self::FOCUS, Vec3::Y)
+		Transform::from_translation(self.focus + rotation * Vec3::Z * self.distance)
+			.looking_at(self.focus, Vec3::Y)
 	}
 }
 
@@ -57,5 +65,52 @@ fn update_camera_transform(
 ) {
 	for (mut transform, orbit_camera) in &mut orbit_cameras {
 		*transform = orbit_camera.transform();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn camera_facing_negative_z(distance: f32) -> OrbitCamera {
+		OrbitCamera {
+			yaw: 0.0,
+			distance,
+			..default()
+		}
+	}
+
+	#[test]
+	fn pans_along_the_view_direction_on_the_ground_plane() {
+		let mut camera = camera_facing_negative_z(10.0);
+		let start = camera.focus;
+
+		camera.pan(0.1, 0.2);
+
+		assert!((camera.focus - start - Vec3::new(1.0, 0.0, -2.0)).length() < 1e-5);
+	}
+
+	#[test]
+	fn pan_follows_the_yaw() {
+		let mut camera = camera_facing_negative_z(10.0);
+		camera.yaw = std::f32::consts::FRAC_PI_2;
+		let start = camera.focus;
+
+		// A quarter turn makes "forward" point along negative X.
+		camera.pan(0.0, 0.1);
+
+		assert!((camera.focus - start - Vec3::new(-1.0, 0.0, 0.0)).length() < 1e-5);
+	}
+
+	#[test]
+	fn pan_distance_scales_with_zoom() {
+		let mut near = camera_facing_negative_z(5.0);
+		let mut far = camera_facing_negative_z(20.0);
+		let start = near.focus;
+
+		near.pan(0.1, 0.0);
+		far.pan(0.1, 0.0);
+
+		assert!(((far.focus - start).length() / (near.focus - start).length() - 4.0).abs() < 1e-5);
 	}
 }
