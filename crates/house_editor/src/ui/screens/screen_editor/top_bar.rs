@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-	editor::EditorAction,
+	editor::controls::EditorAction,
 	ui::{
 		icons::{Icon, Icons},
 		theme::{colors, editor_layout, spacing},

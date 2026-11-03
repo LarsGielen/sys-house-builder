@@ -3,12 +3,12 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::EditorAction;
+use crate::editor::controls::EditorAction;
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
 // Embedded so there is always a valid keymap to fall back to, without duplicating the bindings in code.
-const BUILT_IN_KEYMAP: &str = include_str!("../../assets/keymap.toml");
+const BUILT_IN_KEYMAP: &str = include_str!("../../../assets/keymap.toml");
 
 const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("a", KeyCode::KeyA),

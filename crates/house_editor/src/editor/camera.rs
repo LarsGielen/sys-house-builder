@@ -3,7 +3,9 @@ use bevy::prelude::*;
 pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
-	fn build(&self, _app: &mut App) {}
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, update_camera_transform);
+	}
 }
 
 #[derive(Component)]
@@ -30,12 +32,12 @@ impl OrbitCamera {
 	const MIN_DISTANCE: f32 = 4.0;
 	const MAX_DISTANCE: f32 = 40.0;
 
-	fn orbit(&mut self, yaw_delta: f32, pitch_delta: f32) {
+	pub fn orbit(&mut self, yaw_delta: f32, pitch_delta: f32) {
 		self.yaw += yaw_delta;
 		self.pitch = (self.pitch + pitch_delta).clamp(Self::MIN_PITCH, Self::MAX_PITCH);
 	}
 
-	fn zoom(&mut self, factor: f32) {
+	pub fn zoom(&mut self, factor: f32) {
 		self.distance = (self.distance * factor).clamp(Self::MIN_DISTANCE, Self::MAX_DISTANCE);
 	}
 
@@ -43,5 +45,13 @@ impl OrbitCamera {
 		let rotation = Quat::from_euler(EulerRot::YXZ, self.yaw, -self.pitch, 0.0);
 		Transform::from_translation(Self::FOCUS + rotation * Vec3::Z * self.distance)
 			.looking_at(Self::FOCUS, Vec3::Y)
+	}
+}
+
+fn update_camera_transform(
+	mut orbit_cameras: Query<(&mut Transform, &OrbitCamera), Changed<OrbitCamera>>,
+) {
+	for (mut transform, orbit_camera) in &mut orbit_cameras {
+		*transform = orbit_camera.transform();
 	}
 }

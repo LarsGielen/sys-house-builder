@@ -5,29 +5,28 @@ use crate::{
 	editor::camera::{OrbitCamera, OrbitCameraPlugin},
 };
 
-mod action_handler;
-mod actions;
 mod camera;
-mod shortcuts;
-
-pub use actions::{ActionTrigger, EditorAction};
-pub use shortcuts::Keymap;
+pub(crate) mod controls;
 
 pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((OrbitCameraPlugin, shortcuts::ShortcutsPlugin));
+		app.add_plugins((controls::ControlsPlugin, OrbitCameraPlugin));
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
 		app.add_systems(OnExit(AppState::Editor), remove_viewport_camera);
-		app.add_observer(action_handler::handle_action);
 	}
 }
 
 #[derive(Resource)]
 pub struct ViewportCamera(pub Entity);
 
-pub(crate) fn setup_editor(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+pub(crate) fn setup_editor(
+	mut commands: Commands,
+	mut images: ResMut<Assets<Image>>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+) {
 	let render_target = images.add(Image::new_target_texture(
 		1,
 		1,
@@ -48,6 +47,19 @@ pub(crate) fn setup_editor(mut commands: Commands, mut images: ResMut<Assets<Ima
 		))
 		.id();
 	commands.insert_resource(ViewportCamera(camera));
+
+	// Temporary scene for checking the camera; remove once real geometry is rendered.
+	commands.spawn((
+		Mesh3d(meshes.add(Cuboid::new(2.0, 2.0, 2.0))),
+		MeshMaterial3d(materials.add(Color::srgb(0.8, 0.4, 0.3))),
+		Transform::from_xyz(0.0, 1.0, 0.0),
+		DespawnOnExit::<AppState>(AppState::Editor),
+	));
+	commands.spawn((
+		DirectionalLight::default(),
+		Transform::from_xyz(4.0, 8.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
+		DespawnOnExit::<AppState>(AppState::Editor),
+	));
 }
 
 // The camera entity itself is despawned by `DespawnOnExit`; this drops the dangling handle to it.

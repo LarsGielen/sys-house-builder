@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::editor::EditorAction;
+use crate::editor::controls::EditorAction;
 
 pub fn handle_action(action: On<EditorAction>) {
 	match *action {
