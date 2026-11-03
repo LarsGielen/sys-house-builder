@@ -1,10 +1,14 @@
 use bevy::prelude::*;
 
+/// Systems that apply the `OrbitCamera` state to the camera. Whatever changes that state must run before this set.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct OrbitCameraSystems;
+
 pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, update_camera_transform);
+		app.add_systems(Update, update_camera_transform.in_set(OrbitCameraSystems));
 	}
 }
 

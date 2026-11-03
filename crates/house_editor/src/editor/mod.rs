@@ -2,7 +2,10 @@ use bevy::{camera::RenderTarget, prelude::*, render::render_resource::TextureFor
 
 use crate::{
 	app_state::AppState,
-	editor::camera::{OrbitCamera, OrbitCameraPlugin},
+	editor::{
+		camera::{OrbitCamera, OrbitCameraPlugin, OrbitCameraSystems},
+		controls::ControlsSystems,
+	},
 };
 
 mod camera;
@@ -13,6 +16,8 @@ pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins((controls::ControlsPlugin, OrbitCameraPlugin));
+		app.configure_sets(Update, (ControlsSystems, OrbitCameraSystems).chain()); // Input must be applied before the camera reads it, or the transform lags a frame.
+
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
 		app.add_systems(OnExit(AppState::Editor), remove_viewport_camera);
 	}

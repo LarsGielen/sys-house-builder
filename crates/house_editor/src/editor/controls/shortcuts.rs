@@ -71,15 +71,6 @@ const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("right", KeyCode::ArrowRight),
 ];
 
-pub struct ShortcutsPlugin;
-
-impl Plugin for ShortcutsPlugin {
-	fn build(&self, app: &mut App) {
-		app.insert_resource(Keymap::load())
-			.add_systems(Update, trigger_shortcuts);
-	}
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shortcut {
 	key: KeyCode,
@@ -196,7 +187,7 @@ impl Keymap {
 
 	/// Reads the keymap from the assets folder, falling back to the built-in keymap if the file
 	/// is missing or invalid so that a broken file never leaves the editor without shortcuts.
-	fn load() -> Self {
+	pub(super) fn load() -> Self {
 		let path = FileAssetReader::get_base_path()
 			.join("assets")
 			.join(KEYMAP_FILE);
@@ -245,7 +236,11 @@ impl Keymap {
 	}
 }
 
-fn trigger_shortcuts(keys: Res<ButtonInput<KeyCode>>, keymap: Res<Keymap>, mut commands: Commands) {
+pub(super) fn trigger_shortcuts(
+	keys: Res<ButtonInput<KeyCode>>,
+	keymap: Res<Keymap>,
+	mut commands: Commands,
+) {
 	// First match only: one key press must fire at most one action.
 	let Some((_, action)) = keymap
 		.bindings
