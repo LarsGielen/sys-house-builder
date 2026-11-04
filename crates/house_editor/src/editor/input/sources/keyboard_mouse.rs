@@ -23,7 +23,7 @@ impl ButtonSource {
 		mouse_buttons: &ButtonInput<MouseButton>,
 		state: &mut ActionState,
 	) {
-		for &(shortcut, action_name) in keymap.bindings() {
+		for &(shortcut, action_name) in keymap.button_bindings() {
 			if self.latched.contains(&shortcut) {
 				if !shortcut.input_held(keys, mouse_buttons) {
 					self.latched.remove(&shortcut);

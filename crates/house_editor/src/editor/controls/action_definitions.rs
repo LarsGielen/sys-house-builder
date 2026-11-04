@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::editor::input::{Action, ActionGroup, ValueKind};
+use crate::editor::input::{Action, ActionGroup, AxisMode, ValueKind};
 
 /// Everything a UI widget can be bound to. The keymap does not use this: it binds shortcuts to
 /// action names, so any registered action can have one.
@@ -72,10 +72,10 @@ impl Action for EditorAction {
 	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
 	fn name(self) -> &'static str {
 		match self {
-			Self::Undo => "editor.undo",
-			Self::Redo => "editor.redo",
-			Self::Save => "editor.save",
-			Self::Open => "editor.open",
+			EditorAction::Undo => "editor.undo",
+			EditorAction::Redo => "editor.redo",
+			EditorAction::Save => "editor.save",
+			EditorAction::Open => "editor.open",
 		}
 	}
 
@@ -96,24 +96,33 @@ impl ActionGroup for EditorAction {
 pub enum CameraAction {
 	Orbit,
 	Pan,
+	Look,
+	Zoom,
 }
 
 impl Action for CameraAction {
 	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
 	fn name(self) -> &'static str {
 		match self {
-			Self::Orbit => "camera.orbit",
-			Self::Pan => "camera.pan",
+			CameraAction::Orbit => "camera.orbit",
+			CameraAction::Pan => "camera.pan",
+			CameraAction::Look => "camera.look",
+			CameraAction::Zoom => "camera.scroll",
 		}
 	}
 
 	fn value(self) -> ValueKind {
-		ValueKind::Button
+		match self {
+			CameraAction::Orbit => ValueKind::Button,
+			CameraAction::Pan => ValueKind::Button,
+			CameraAction::Look => ValueKind::Axis2D(AxisMode::Relative),
+			CameraAction::Zoom => ValueKind::Axis1D(AxisMode::Relative),
+		}
 	}
 }
 
 impl ActionGroup for CameraAction {
 	fn all() -> &'static [Self] {
-		&[Self::Orbit, Self::Pan]
+		&[Self::Orbit, Self::Pan, Self::Look, Self::Zoom]
 	}
 }

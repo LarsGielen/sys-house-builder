@@ -17,7 +17,7 @@ impl Keymap {
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
 	) -> Option<CameraAction> {
-		self.bindings().iter().find_map(|(shortcut, name)| {
+		self.button_bindings().iter().find_map(|(shortcut, name)| {
 			CameraAction::from_name(name).filter(|_| shortcut.just_pressed(keys, mouse_buttons))
 		})
 	}
@@ -42,9 +42,12 @@ pub(super) fn trigger_shortcuts(
 ) {
 	// First match only: one key press must fire at most one action. Actions that are not editor
 	// actions are skipped because they are held rather than triggered.
-	let action = keymap.bindings().iter().find_map(|(shortcut, name)| {
-		EditorAction::from_name(name).filter(|_| shortcut.just_pressed(&keys, &mouse_buttons))
-	});
+	let action = keymap
+		.button_bindings()
+		.iter()
+		.find_map(|(shortcut, name)| {
+			EditorAction::from_name(name).filter(|_| shortcut.just_pressed(&keys, &mouse_buttons))
+		});
 
 	if let Some(action) = action {
 		commands.trigger(action);
@@ -66,7 +69,7 @@ mod tests {
 	#[test]
 	fn built_in_keymap_is_valid() {
 		let keymap = Keymap::parse(BUILT_IN_KEYMAP, &registered_actions()).unwrap();
-		assert_eq!(keymap.bindings().len(), 7);
+		assert_eq!(keymap.button_bindings().len(), 7);
 	}
 
 	// Fixed here instead of read from the built-in keymap, whose default bindings may change.

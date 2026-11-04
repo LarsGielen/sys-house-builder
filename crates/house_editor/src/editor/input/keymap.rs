@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::input::{Action, ActionState, Shortcut, ValueKind};
+use crate::editor::input::{Action, ActionState, AxisInput, Shortcut, ValueKind};
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
@@ -12,20 +12,25 @@ struct KeymapFile {
 	bindings: BTreeMap<String, Vec<String>>,
 }
 
-/// Shortcuts bound to registered actions by name, so the keymap works for any action group.
+/// Physical inputs bound to registered actions by name, so the keymap works for any action group.
 #[derive(Resource)]
 pub struct Keymap {
-	bindings: Vec<(Shortcut, &'static str)>,
+	button_bindings: Vec<(Shortcut, &'static str)>,
+	axis_bindings: Vec<(AxisInput, &'static str)>,
 }
 
 impl Keymap {
-	pub fn bindings(&self) -> &[(Shortcut, &'static str)] {
-		&self.bindings
+	pub fn button_bindings(&self) -> &[(Shortcut, &'static str)] {
+		&self.button_bindings
+	}
+
+	pub fn axis_bindings(&self) -> &[(AxisInput, &'static str)] {
+		&self.axis_bindings
 	}
 
 	pub fn shortcuts_for(&self, action: impl Action) -> impl Iterator<Item = &Shortcut> {
 		let name = action.name();
-		self.bindings
+		self.button_bindings
 			.iter()
 			.filter(move |(_, bound_name)| *bound_name == name)
 			.map(|(shortcut, _)| shortcut)
@@ -66,34 +71,72 @@ impl Keymap {
 	pub(crate) fn parse(text: &str, actions: &ActionState) -> Result<Self, String> {
 		let file: KeymapFile = toml::from_str(text).map_err(|error| error.to_string())?;
 
-		let mut bindings: Vec<(Shortcut, &'static str)> = Vec::new();
-		for (action_name, shortcut_texts) in file.bindings {
+		let mut button_bindings: Vec<(Shortcut, &'static str)> = Vec::new();
+		let mut axis_bindings: Vec<(AxisInput, &'static str)> = Vec::new();
+
+		for (action_name, entry_texts) in file.bindings {
 			let action = actions
 				.registered_name(&action_name)
 				.ok_or_else(|| format!("unknown action \"{action_name}\""))?;
 
-			// A shortcut is a button press, so it can only drive a button action.
-			if actions.kind_of(action) != Some(ValueKind::Button) {
-				return Err(format!(
-					"action \"{action_name}\" is not a button, so it cannot be bound to a shortcut"
-				));
-			}
+			for entry_text in entry_texts {
+				// Axis inputs are told apart from shortcuts by their last token
+				let last_token = entry_text.rsplit('+').next().unwrap_or_default();
 
-			for shortcut_text in shortcut_texts {
-				let shortcut: Shortcut = shortcut_text
-					.parse()
-					.map_err(|error| format!("action \"{action_name}\": {error}"))?;
-				if let Some((_, other_action)) =
-					bindings.iter().find(|(existing, _)| *existing == shortcut)
-				{
+				if let Ok(input) = last_token.parse::<AxisInput>() {
+					if entry_text.contains('+') {
+						return Err(format!(
+							"action \"{action_name}\": modifiers on axis inputs are not supported (\"{entry_text}\")"
+						));
+					}
+
+					if actions.kind_of(action) != Some(input.value_kind()) {
+						return Err(format!(
+							"action \"{action_name}\" cannot be bound to \"{input}\": the kinds do not match"
+						));
+					}
+
+					if let Some((_, other_action)) = axis_bindings
+						.iter()
+						.find(|(existing, _)| *existing == input)
+					{
+						return Err(format!(
+							"axis input \"{input}\" is bound to both {other_action} and {action}"
+						));
+					}
+
+					axis_bindings.push((input, action));
+					continue;
+				}
+
+				// A shortcut is a button press, so it can only drive a button action.
+				if actions.kind_of(action) != Some(ValueKind::Button) {
 					return Err(format!(
-						"shortcut \"{shortcut_text}\" is bound to both {other_action} and {action}"
+						"action \"{action_name}\" is not a button, so it cannot be bound to the shortcut \"{entry_text}\""
 					));
 				}
-				bindings.push((shortcut, action));
+
+				let shortcut: Shortcut = entry_text
+					.parse()
+					.map_err(|error| format!("action \"{action_name}\": {error}"))?;
+
+				if let Some((_, other_action)) = button_bindings
+					.iter()
+					.find(|(existing, _)| *existing == shortcut)
+				{
+					return Err(format!(
+						"shortcut \"{entry_text}\" is bound to both {other_action} and {action}"
+					));
+				}
+
+				button_bindings.push((shortcut, action));
 			}
 		}
-		Ok(Self { bindings })
+
+		Ok(Self {
+			button_bindings,
+			axis_bindings,
+		})
 	}
 }
 

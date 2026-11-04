@@ -89,6 +89,9 @@ pub fn update_camera_controls(
 				),
 				// The ground follows the cursor, so the focus moves opposite to the horizontal drag.
 				CameraAction::Pan => camera.pan(-delta.x * PAN_PER_PIXEL, delta.y * PAN_PER_PIXEL),
+				// Axes are never bound to shortcuts, so they cannot start a drag. This goes away
+				// when the camera reads the action state.
+				CameraAction::Look | CameraAction::Zoom => {}
 			}
 		}
 	}

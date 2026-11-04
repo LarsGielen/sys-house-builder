@@ -6,6 +6,7 @@ enum TestAction {
 	Undo,
 	Redo,
 	Look,
+	Zoom,
 }
 
 impl Action for TestAction {
@@ -14,12 +15,14 @@ impl Action for TestAction {
 			Self::Undo => "test.undo",
 			Self::Redo => "test.redo",
 			Self::Look => "test.look",
+			Self::Zoom => "test.zoom",
 		}
 	}
 
 	fn value(self) -> ValueKind {
 		match self {
 			Self::Look => ValueKind::Axis2D(AxisMode::Relative),
+			Self::Zoom => ValueKind::Axis1D(AxisMode::Relative),
 			_ => ValueKind::Button,
 		}
 	}
@@ -27,7 +30,7 @@ impl Action for TestAction {
 
 impl ActionGroup for TestAction {
 	fn all() -> &'static [Self] {
-		&[Self::Undo, Self::Redo, Self::Look]
+		&[Self::Undo, Self::Redo, Self::Look, Self::Zoom]
 	}
 }
 
@@ -45,7 +48,7 @@ fn finds_all_shortcuts_of_an_action() {
 
 	assert_eq!(keymap.shortcuts_for(TestAction::Redo).count(), 2);
 	assert_eq!(keymap.shortcuts_for(TestAction::Undo).count(), 1);
-	assert_eq!(keymap.bindings().len(), 3);
+	assert_eq!(keymap.button_bindings().len(), 3);
 }
 
 #[test]
@@ -83,4 +86,49 @@ fn rejects_a_shortcut_bound_to_an_action_that_is_not_a_button() {
 	let error = Keymap::parse(text, &registered_actions()).err().unwrap();
 
 	assert!(error.contains("test.look"), "{error}");
+}
+
+fn parse_error(text: &str) -> String {
+	Keymap::parse(text, &registered_actions()).err().unwrap()
+}
+
+#[test]
+fn parses_axis_inputs_into_axis_bindings() {
+	let text = "[bindings]\n\"test.undo\" = [\"ctrl+z\"]\n\"test.look\" = [\"mouse_motion\"]\n\"test.zoom\" = [\"scroll\"]";
+	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
+
+	assert_eq!(keymap.button_bindings().len(), 1);
+	assert_eq!(
+		keymap.axis_bindings(),
+		&[
+			(AxisInput::MouseMotion, "test.look"),
+			(AxisInput::Scroll, "test.zoom")
+		]
+	);
+}
+
+#[test]
+fn rejects_an_axis_input_whose_kind_does_not_match_the_action() {
+	let on_button = parse_error("[bindings]\n\"test.undo\" = [\"mouse_motion\"]");
+	assert!(on_button.contains("test.undo"), "{on_button}");
+
+	let scroll_on_2d = parse_error("[bindings]\n\"test.look\" = [\"scroll\"]");
+	assert!(scroll_on_2d.contains("test.look"), "{scroll_on_2d}");
+
+	let motion_on_1d = parse_error("[bindings]\n\"test.zoom\" = [\"mouse_motion\"]");
+	assert!(motion_on_1d.contains("test.zoom"), "{motion_on_1d}");
+}
+
+#[test]
+fn rejects_modifiers_on_axis_inputs() {
+	let error = parse_error("[bindings]\n\"test.zoom\" = [\"shift+scroll\"]");
+
+	assert!(error.contains("modifiers"), "{error}");
+}
+
+#[test]
+fn rejects_an_axis_input_bound_twice() {
+	let error = parse_error("[bindings]\n\"test.zoom\" = [\"scroll\", \"scroll\"]");
+
+	assert!(error.contains("bound to both"), "{error}");
 }

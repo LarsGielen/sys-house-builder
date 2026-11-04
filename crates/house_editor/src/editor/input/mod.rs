@@ -1,6 +1,7 @@
 use bevy::{input::InputSystems, prelude::*};
 
 mod action;
+mod axis_input;
 mod keymap;
 mod shortcut;
 mod signal;
@@ -8,9 +9,10 @@ mod sources;
 mod state;
 
 pub use action::{Action, ActionGroup};
+pub use axis_input::AxisInput;
 pub use keymap::Keymap;
 pub use shortcut::Shortcut;
-pub(crate) use signal::ValueKind;
+pub use signal::{AxisMode, ValueKind};
 pub use state::ActionState;
 
 use sources::ButtonSource;
