@@ -10,12 +10,17 @@ use crate::{
 
 mod camera;
 pub(crate) mod controls;
+mod input;
 
 pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((controls::ControlsPlugin, OrbitCameraPlugin));
+		app.add_plugins((
+			input::InputPlugin,
+			controls::ControlsPlugin,
+			OrbitCameraPlugin,
+		));
 		app.configure_sets(Update, (ControlsSystems, OrbitCameraSystems).chain()); // Input must be applied before the camera reads it, or the transform lags a frame.
 
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
