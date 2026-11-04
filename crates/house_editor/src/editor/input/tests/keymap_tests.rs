@@ -1,10 +1,11 @@
 use super::*;
-use crate::editor::input::{ActionGroup, ValueKind};
+use crate::editor::input::{ActionGroup, signal::AxisMode};
 
 #[derive(Clone, Copy)]
 enum TestAction {
 	Undo,
 	Redo,
+	Look,
 }
 
 impl Action for TestAction {
@@ -12,17 +13,21 @@ impl Action for TestAction {
 		match self {
 			Self::Undo => "test.undo",
 			Self::Redo => "test.redo",
+			Self::Look => "test.look",
 		}
 	}
 
 	fn value(self) -> ValueKind {
-		ValueKind::Button
+		match self {
+			Self::Look => ValueKind::Axis2D(AxisMode::Relative),
+			_ => ValueKind::Button,
+		}
 	}
 }
 
 impl ActionGroup for TestAction {
 	fn all() -> &'static [Self] {
-		&[Self::Undo, Self::Redo]
+		&[Self::Undo, Self::Redo, Self::Look]
 	}
 }
 
@@ -70,4 +75,12 @@ fn rejects_a_shortcut_bound_to_two_actions() {
 fn rejects_invalid_shortcuts_without_returning_a_partial_keymap() {
 	let text = "[bindings]\n\"test.undo\" = [\"ctrl+z\", \"meta+z\"]";
 	assert!(Keymap::parse(text, &registered_actions()).is_err());
+}
+
+#[test]
+fn rejects_a_shortcut_bound_to_an_action_that_is_not_a_button() {
+	let text = "[bindings]\n\"test.look\" = [\"ctrl+l\"]";
+	let error = Keymap::parse(text, &registered_actions()).err().unwrap();
+
+	assert!(error.contains("test.look"), "{error}");
 }

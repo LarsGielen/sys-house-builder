@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::editor::{
-	controls::{CameraControl, EditorAction},
+	controls::{CameraAction, EditorAction},
 	input::{ActionGroup, Keymap},
 };
 
@@ -16,16 +16,16 @@ impl Keymap {
 		&self,
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
-	) -> Option<CameraControl> {
+	) -> Option<CameraAction> {
 		self.bindings().iter().find_map(|(shortcut, name)| {
-			CameraControl::from_name(name).filter(|_| shortcut.just_pressed(keys, mouse_buttons))
+			CameraAction::from_name(name).filter(|_| shortcut.just_pressed(keys, mouse_buttons))
 		})
 	}
 
 	/// Whether the input of any shortcut of the control is still down, regardless of modifiers.
 	pub fn camera_control_held(
 		&self,
-		control: CameraControl,
+		control: CameraAction,
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
 	) -> bool {
@@ -59,7 +59,7 @@ mod tests {
 	fn registered_actions() -> ActionState {
 		let mut actions = ActionState::default();
 		actions.register_group::<EditorAction>();
-		actions.register_group::<CameraControl>();
+		actions.register_group::<CameraAction>();
 		actions
 	}
 
@@ -80,8 +80,8 @@ mod tests {
 		mouse_buttons.press(MouseButton::Middle);
 
 		// Shift was released after the pan started, which must not end the drag.
-		assert!(keymap.camera_control_held(CameraControl::Pan, &keys, &mouse_buttons));
-		assert!(keymap.camera_control_held(CameraControl::Orbit, &keys, &mouse_buttons));
+		assert!(keymap.camera_control_held(CameraAction::Pan, &keys, &mouse_buttons));
+		assert!(keymap.camera_control_held(CameraAction::Orbit, &keys, &mouse_buttons));
 	}
 
 	#[test]
@@ -92,13 +92,13 @@ mod tests {
 		mouse_buttons.press(MouseButton::Middle);
 		assert_eq!(
 			keymap.camera_control_pressed(&keys, &mouse_buttons),
-			Some(CameraControl::Orbit)
+			Some(CameraAction::Orbit)
 		);
 
 		keys.press(KeyCode::ShiftLeft);
 		assert_eq!(
 			keymap.camera_control_pressed(&keys, &mouse_buttons),
-			Some(CameraControl::Pan)
+			Some(CameraAction::Pan)
 		);
 	}
 }

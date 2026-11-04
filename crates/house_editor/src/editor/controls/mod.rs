@@ -5,7 +5,7 @@ mod action_handler;
 mod camera_controls;
 mod shortcuts;
 
-pub use action_definitions::{ActionTrigger, CameraControl, EditorAction};
+pub use action_definitions::{ActionTrigger, CameraAction, EditorAction};
 
 use crate::editor::input::{ActionState, InputAppExt, Keymap};
 
@@ -19,7 +19,7 @@ impl Plugin for ControlsPlugin {
 	fn build(&self, app: &mut App) {
 		// The keymap binds shortcuts by action name, so the actions must be registered before it loads.
 		app.add_input_actions::<EditorAction>()
-			.add_input_actions::<CameraControl>();
+			.add_input_actions::<CameraAction>();
 
 		app.add_observer(action_handler::handle_action);
 		let keymap = Keymap::load(

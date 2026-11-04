@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::input::{Action, ActionState, Shortcut};
+use crate::editor::input::{Action, ActionState, Shortcut, ValueKind};
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
@@ -71,6 +71,14 @@ impl Keymap {
 			let action = actions
 				.registered_name(&action_name)
 				.ok_or_else(|| format!("unknown action \"{action_name}\""))?;
+
+			// A shortcut is a button press, so it can only drive a button action.
+			if actions.kind_of(action) != Some(ValueKind::Button) {
+				return Err(format!(
+					"action \"{action_name}\" is not a button, so it cannot be bound to a shortcut"
+				));
+			}
+
 			for shortcut_text in shortcut_texts {
 				let shortcut: Shortcut = shortcut_text
 					.parse()

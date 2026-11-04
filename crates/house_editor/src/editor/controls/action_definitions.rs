@@ -7,7 +7,7 @@ use crate::editor::input::{Action, ActionGroup, ValueKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoundAction {
 	Editor(EditorAction),
-	Camera(CameraControl),
+	Camera(CameraAction),
 }
 
 impl BoundAction {
@@ -43,8 +43,8 @@ impl From<EditorAction> for BoundAction {
 	}
 }
 
-impl From<CameraControl> for BoundAction {
-	fn from(control: CameraControl) -> Self {
+impl From<CameraAction> for BoundAction {
+	fn from(control: CameraAction) -> Self {
 		Self::Camera(control)
 	}
 }
@@ -93,12 +93,12 @@ impl ActionGroup for EditorAction {
 // ## CameraControl ## //
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CameraControl {
+pub enum CameraAction {
 	Orbit,
 	Pan,
 }
 
-impl Action for CameraControl {
+impl Action for CameraAction {
 	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
 	fn name(self) -> &'static str {
 		match self {
@@ -112,7 +112,7 @@ impl Action for CameraControl {
 	}
 }
 
-impl ActionGroup for CameraControl {
+impl ActionGroup for CameraAction {
 	fn all() -> &'static [Self] {
 		&[Self::Orbit, Self::Pan]
 	}

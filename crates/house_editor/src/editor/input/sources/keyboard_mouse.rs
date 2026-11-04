@@ -36,8 +36,8 @@ impl ButtonSource {
 				continue;
 			}
 
-			// The keymap only binds registered actions, but nothing yet stops a shortcut from being
-			// bound to an action that is not a button. Warn once instead of every frame.
+			// The keymap only binds registered button actions, so this is a bug if it ever fails.
+			// Warn once instead of every frame.
 			if let Err(error) =
 				state.contribute_named(shortcut.source(), action_name, Signal::Button(true))
 			{

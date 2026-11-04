@@ -62,6 +62,10 @@ impl ActionState {
 		self.slots.get_key_value(name).map(|(name, _)| *name)
 	}
 
+	pub fn kind_of(&self, name: &str) -> Option<ValueKind> {
+		self.slots.get(name).map(|slot| slot.value_kind)
+	}
+
 	pub fn start_frame(&mut self) {
 		for slot in self.slots.values_mut() {
 			slot.signal_previous = slot.signal;

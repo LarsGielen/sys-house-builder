@@ -6,7 +6,7 @@ use bevy::{
 	window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use crate::editor::{camera::OrbitCamera, controls::CameraControl, input::Keymap};
+use crate::editor::{camera::OrbitCamera, controls::CameraAction, input::Keymap};
 
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.01;
 const PAN_PER_PIXEL: f32 = 0.0011;
@@ -17,7 +17,7 @@ const ZOOM_PER_SCROLL_PIXEL: f32 = 0.0025;
 #[derive(Clone, Copy)]
 struct CameraDrag {
 	camera: Entity,
-	control: CameraControl,
+	control: CameraAction,
 }
 
 /// The drag in progress, if any. A resource so that `update_cursor_lock` can follow it.
@@ -35,12 +35,12 @@ pub struct CameraInput<'w> {
 }
 
 impl CameraInput<'_> {
-	fn control_pressed(&self) -> Option<CameraControl> {
+	fn control_pressed(&self) -> Option<CameraAction> {
 		self.keymap
 			.camera_control_pressed(&self.keys, &self.mouse_buttons)
 	}
 
-	fn control_held(&self, control: CameraControl) -> bool {
+	fn control_held(&self, control: CameraAction) -> bool {
 		self.keymap
 			.camera_control_held(control, &self.keys, &self.mouse_buttons)
 	}
@@ -83,12 +83,12 @@ pub fn update_camera_controls(
 		if delta != Vec2::ZERO {
 			match drag.control {
 				// Dragging right turns the scene right, so the camera moves the other way.
-				CameraControl::Orbit => camera.orbit(
+				CameraAction::Orbit => camera.orbit(
 					-delta.x * ORBIT_RADIANS_PER_PIXEL,
 					delta.y * ORBIT_RADIANS_PER_PIXEL,
 				),
 				// The ground follows the cursor, so the focus moves opposite to the horizontal drag.
-				CameraControl::Pan => camera.pan(-delta.x * PAN_PER_PIXEL, delta.y * PAN_PER_PIXEL),
+				CameraAction::Pan => camera.pan(-delta.x * PAN_PER_PIXEL, delta.y * PAN_PER_PIXEL),
 			}
 		}
 	}
