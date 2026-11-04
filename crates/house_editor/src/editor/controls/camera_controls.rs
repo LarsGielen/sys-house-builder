@@ -1,17 +1,14 @@
 use bevy::{
-	ecs::system::SystemParam,
-	input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
 	picking::hover::Hovered,
 	prelude::*,
 	window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use crate::editor::{camera::OrbitCamera, controls::CameraAction, input::Keymap};
+use crate::editor::{camera::OrbitCamera, controls::CameraAction, input::ActionState};
 
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.01;
 const PAN_PER_PIXEL: f32 = 0.0011;
 const ZOOM_PER_SCROLL_LINE: f32 = 0.1;
-const ZOOM_PER_SCROLL_PIXEL: f32 = 0.0025;
 
 /// A drag stays tied to the camera it started on, even if the cursor leaves the viewport.
 #[derive(Clone, Copy)]
@@ -24,30 +21,8 @@ struct CameraDrag {
 #[derive(Resource, Default)]
 pub(super) struct ActiveCameraDrag(Option<CameraDrag>);
 
-/// Everything the camera controls read from the mouse, keyboard and keymap.
-#[derive(SystemParam)]
-pub struct CameraInput<'w> {
-	keys: Res<'w, ButtonInput<KeyCode>>,
-	mouse_buttons: Res<'w, ButtonInput<MouseButton>>,
-	keymap: Res<'w, Keymap>,
-	mouse_motion: Res<'w, AccumulatedMouseMotion>,
-	mouse_scroll: Res<'w, AccumulatedMouseScroll>,
-}
-
-impl CameraInput<'_> {
-	fn control_pressed(&self) -> Option<CameraAction> {
-		self.keymap
-			.camera_control_pressed(&self.keys, &self.mouse_buttons)
-	}
-
-	fn control_held(&self, control: CameraAction) -> bool {
-		self.keymap
-			.camera_control_held(control, &self.keys, &self.mouse_buttons)
-	}
-}
-
 pub fn update_camera_controls(
-	input: CameraInput,
+	state: Res<ActionState>,
 	viewports: Query<(&ViewportNode, &Hovered)>,
 	mut cameras: Query<&mut OrbitCamera>,
 	mut active_drag: ResMut<ActiveCameraDrag>,
@@ -59,14 +34,16 @@ pub fn update_camera_controls(
 
 	// Checked before starting a drag so that a missed release can never leave a drag stuck.
 	if let Some(drag) = active_drag.0
-		&& !input.control_held(drag.control)
+		&& !state.pressed(drag.control)
 	{
 		active_drag.0 = None;
 	}
 
 	if active_drag.0.is_none()
 		&& let Some(camera) = hovered_camera
-		&& let Some(control) = input.control_pressed()
+		&& let Some(control) = [CameraAction::Orbit, CameraAction::Pan]
+			.into_iter()
+			.find(|&action| state.just_pressed(action))
 	{
 		active_drag.0 = Some(CameraDrag { camera, control });
 	}
@@ -79,7 +56,7 @@ pub fn update_camera_controls(
 		};
 
 		// Skipping zero deltas keeps `Changed<OrbitCamera>` from firing on every idle frame.
-		let delta = input.mouse_motion.delta;
+		let delta = state.axis2d(CameraAction::Look);
 		if delta != Vec2::ZERO {
 			match drag.control {
 				// Dragging right turns the scene right, so the camera moves the other way.
@@ -96,14 +73,12 @@ pub fn update_camera_controls(
 		}
 	}
 
+	let zoom = state.axis1d(CameraAction::Zoom);
 	if let Some(camera_entity) = hovered_camera
-		&& input.mouse_scroll.delta.y != 0.0
+		&& zoom != 0.0
 		&& let Ok(mut camera) = cameras.get_mut(camera_entity)
 	{
-		camera.zoom(zoom_factor(
-			input.mouse_scroll.unit,
-			input.mouse_scroll.delta.y,
-		));
+		camera.zoom(zoom_factor(zoom));
 	}
 }
 
@@ -122,12 +97,8 @@ pub(super) fn update_cursor_lock(
 	};
 }
 
-fn zoom_factor(unit: MouseScrollUnit, scroll_y: f32) -> f32 {
-	let zoom_per_unit = match unit {
-		MouseScrollUnit::Line => ZOOM_PER_SCROLL_LINE,
-		MouseScrollUnit::Pixel => ZOOM_PER_SCROLL_PIXEL,
-	};
-	(-scroll_y * zoom_per_unit).exp()
+fn zoom_factor(lines: f32) -> f32 {
+	(-lines * ZOOM_PER_SCROLL_LINE).exp()
 }
 
 #[cfg(test)]
@@ -136,19 +107,13 @@ mod tests {
 
 	#[test]
 	fn scrolling_up_zooms_in_and_down_zooms_out() {
-		assert!(zoom_factor(MouseScrollUnit::Line, 1.0) < 1.0);
-		assert!(zoom_factor(MouseScrollUnit::Line, -1.0) > 1.0);
+		assert!(zoom_factor(1.0) < 1.0);
+		assert!(zoom_factor(-1.0) > 1.0);
 	}
 
 	#[test]
 	fn opposite_scrolls_cancel_out() {
-		let factor =
-			zoom_factor(MouseScrollUnit::Pixel, 30.0) * zoom_factor(MouseScrollUnit::Pixel, -30.0);
+		let factor = zoom_factor(30.0) * zoom_factor(-30.0);
 		assert!((factor - 1.0).abs() < 1e-6);
-	}
-
-	#[test]
-	fn a_scroll_line_zooms_more_than_a_scroll_pixel() {
-		assert!(zoom_factor(MouseScrollUnit::Line, 1.0) < zoom_factor(MouseScrollUnit::Pixel, 1.0));
 	}
 }
