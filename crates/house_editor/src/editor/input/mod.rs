@@ -5,7 +5,9 @@ mod shortcut;
 mod signal;
 mod state;
 
+pub use action::{Action, ActionGroup};
 pub use shortcut::Shortcut;
+pub(crate) use signal::ValueKind;
 pub use state::ActionState;
 
 /// The phases of one input frame, in order. Source systems belong in `Sources`; consumers
@@ -15,6 +17,22 @@ pub enum ActionSystems {
 	Begin,
 	Sources,
 	Resolve,
+}
+
+pub trait InputAppExt {
+	/// Registers every action of the group, so the keymap can be bound to them by name.
+	/// Must run before the keymap is loaded.
+	fn add_input_actions<Group: ActionGroup>(&mut self) -> &mut Self;
+}
+
+impl InputAppExt for App {
+	fn add_input_actions<Group: ActionGroup>(&mut self) -> &mut Self {
+		self.init_resource::<ActionState>();
+		self.world_mut()
+			.resource_mut::<ActionState>()
+			.register_group::<Group>();
+		self
+	}
 }
 
 pub struct InputPlugin;

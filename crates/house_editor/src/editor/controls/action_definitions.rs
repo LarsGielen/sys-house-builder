@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
-/// Everything a shortcut can be bound to. Sharing one type keeps the rule that a shortcut
-/// belongs to a single action across both kinds.
+use crate::editor::input::{Action, ActionGroup, ValueKind};
+
+/// Everything a UI widget can be bound to. The keymap does not use this: it binds shortcuts to
+/// action names, so any registered action can have one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoundAction {
 	Editor(EditorAction),
@@ -9,12 +11,6 @@ pub enum BoundAction {
 }
 
 impl BoundAction {
-	pub(super) fn from_name(name: &str) -> Option<Self> {
-		EditorAction::from_name(name)
-			.map(Self::Editor)
-			.or_else(|| CameraControl::from_name(name).map(Self::Camera))
-	}
-
 	/// Sends the event this action stands for.
 	pub fn trigger(self, commands: &mut Commands) {
 		match self {
@@ -25,17 +21,39 @@ impl BoundAction {
 	}
 }
 
+impl Action for BoundAction {
+	fn name(self) -> &'static str {
+		match self {
+			Self::Editor(action) => action.name(),
+			Self::Camera(control) => control.name(),
+		}
+	}
+
+	fn value(self) -> ValueKind {
+		match self {
+			Self::Editor(action) => action.value(),
+			Self::Camera(control) => control.value(),
+		}
+	}
+}
+
 impl From<EditorAction> for BoundAction {
 	fn from(action: EditorAction) -> Self {
 		Self::Editor(action)
 	}
 }
 
+impl From<CameraControl> for BoundAction {
+	fn from(control: CameraControl) -> Self {
+		Self::Camera(control)
+	}
+}
+
 #[derive(Component, Clone, Default)]
 pub struct ActionTrigger(pub Option<BoundAction>);
 
-impl<Action: Into<BoundAction>> From<Action> for ActionTrigger {
-	fn from(action: Action) -> Self {
+impl<Source: Into<BoundAction>> From<Source> for ActionTrigger {
+	fn from(action: Source) -> Self {
 		Self(Some(action.into()))
 	}
 }
@@ -50,16 +68,25 @@ pub enum EditorAction {
 	Open,
 }
 
-impl EditorAction {
+impl Action for EditorAction {
 	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
-	pub fn from_name(name: &str) -> Option<Self> {
-		match name {
-			"editor.undo" => Some(Self::Undo),
-			"editor.redo" => Some(Self::Redo),
-			"editor.save" => Some(Self::Save),
-			"editor.open" => Some(Self::Open),
-			_ => None,
+	fn name(self) -> &'static str {
+		match self {
+			Self::Undo => "editor.undo",
+			Self::Redo => "editor.redo",
+			Self::Save => "editor.save",
+			Self::Open => "editor.open",
 		}
+	}
+
+	fn value(self) -> ValueKind {
+		ValueKind::Button
+	}
+}
+
+impl ActionGroup for EditorAction {
+	fn all() -> &'static [Self] {
+		&[Self::Undo, Self::Redo, Self::Save, Self::Open]
 	}
 }
 
@@ -71,13 +98,22 @@ pub enum CameraControl {
 	Pan,
 }
 
-impl CameraControl {
+impl Action for CameraControl {
 	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
-	fn from_name(name: &str) -> Option<Self> {
-		match name {
-			"camera.orbit" => Some(Self::Orbit),
-			"camera.pan" => Some(Self::Pan),
-			_ => None,
+	fn name(self) -> &'static str {
+		match self {
+			Self::Orbit => "camera.orbit",
+			Self::Pan => "camera.pan",
 		}
+	}
+
+	fn value(self) -> ValueKind {
+		ValueKind::Button
+	}
+}
+
+impl ActionGroup for CameraControl {
+	fn all() -> &'static [Self] {
+		&[Self::Orbit, Self::Pan]
 	}
 }

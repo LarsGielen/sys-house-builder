@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 use crate::editor::input::{
-	action::Action,
+	action::{Action, ActionGroup},
 	signal::{
-		Signal::{self, Axis1D},
+		Signal,
 		ValueKind::{self},
 	},
 };
@@ -44,6 +44,17 @@ impl ActionState {
 				owner: None,
 			},
 		);
+	}
+
+	pub fn register_group<Group: ActionGroup>(&mut self) {
+		for &action in Group::all() {
+			self.register(action);
+		}
+	}
+
+	/// The registered name equal to `name`, as the `'static` string that identifies the action.
+	pub fn registered_name(&self, name: &str) -> Option<&'static str> {
+		self.slots.get_key_value(name).map(|(name, _)| *name)
 	}
 
 	pub fn start_frame(&mut self) {
