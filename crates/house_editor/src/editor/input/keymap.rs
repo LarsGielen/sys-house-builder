@@ -3,20 +3,55 @@ use std::collections::BTreeMap;
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::input::{Action, ActionState, AxisInput, Shortcut, ValueKind};
+use crate::editor::input::{
+	Action, ActionState, AxisBinding, AxisInput, Scale, Shortcut, ValueKind,
+};
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
 #[derive(Deserialize)]
 struct KeymapFile {
-	bindings: BTreeMap<String, Vec<String>>,
+	bindings: BTreeMap<String, Vec<Entry>>,
+}
+
+/// One binding in the keymap file: plain text (`"ctrl+z"`), or a table (`{ input = "scroll",
+/// scale = -1.0 }`) for the bindings that need more than an input.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Entry {
+	Text(String),
+	Table(EntryTable),
+}
+
+// Unknown fields are rejected so that a misspelled option is an error, not silently ignored.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EntryTable {
+	input: String,
+	scale: Option<Scale>,
+}
+
+impl Entry {
+	fn input(&self) -> &str {
+		match self {
+			Self::Text(input) => input,
+			Self::Table(table) => &table.input,
+		}
+	}
+
+	fn scale(&self) -> Option<Scale> {
+		match self {
+			Self::Text(_) => None,
+			Self::Table(table) => table.scale,
+		}
+	}
 }
 
 /// Physical inputs bound to registered actions by name, so the keymap works for any action group.
 #[derive(Resource)]
 pub struct Keymap {
 	button_bindings: Vec<(Shortcut, &'static str)>,
-	axis_bindings: Vec<(AxisInput, &'static str)>,
+	axis_bindings: Vec<AxisBinding>,
 }
 
 impl Keymap {
@@ -24,7 +59,7 @@ impl Keymap {
 		&self.button_bindings
 	}
 
-	pub fn axis_bindings(&self) -> &[(AxisInput, &'static str)] {
+	pub fn axis_bindings(&self) -> &[AxisBinding] {
 		&self.axis_bindings
 	}
 
@@ -72,14 +107,15 @@ impl Keymap {
 		let file: KeymapFile = toml::from_str(text).map_err(|error| error.to_string())?;
 
 		let mut button_bindings: Vec<(Shortcut, &'static str)> = Vec::new();
-		let mut axis_bindings: Vec<(AxisInput, &'static str)> = Vec::new();
+		let mut axis_bindings: Vec<AxisBinding> = Vec::new();
 
-		for (action_name, entry_texts) in file.bindings {
+		for (action_name, entries) in file.bindings {
 			let action = actions
 				.registered_name(&action_name)
 				.ok_or_else(|| format!("unknown action \"{action_name}\""))?;
 
-			for entry_text in entry_texts {
+			for entry in &entries {
+				let entry_text = entry.input();
 				// Axis inputs are told apart from shortcuts by their last token
 				let last_token = entry_text.rsplit('+').next().unwrap_or_default();
 
@@ -96,17 +132,32 @@ impl Keymap {
 						));
 					}
 
-					if let Some((_, other_action)) = axis_bindings
-						.iter()
-						.find(|(existing, _)| *existing == input)
-					{
+					if let Some(other) = axis_bindings.iter().find(|other| other.input == input) {
 						return Err(format!(
-							"axis input \"{input}\" is bound to both {other_action} and {action}"
+							"axis input \"{input}\" is bound to both {} and {action}",
+							other.action
 						));
 					}
 
-					axis_bindings.push((input, action));
+					let scale = match entry.scale() {
+						Some(scale) => scale
+							.validate(input.value_kind())
+							.map_err(|error| format!("action \"{action_name}\": {error}"))?,
+						None => Scale::identity(input.value_kind()),
+					};
+
+					axis_bindings.push(AxisBinding {
+						input,
+						scale,
+						action,
+					});
 					continue;
+				}
+
+				if entry.scale().is_some() {
+					return Err(format!(
+						"action \"{action_name}\": a shortcut cannot have a scale (\"{entry_text}\")"
+					));
 				}
 
 				// A shortcut is a button press, so it can only drive a button action.

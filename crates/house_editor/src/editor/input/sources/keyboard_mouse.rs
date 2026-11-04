@@ -64,10 +64,13 @@ pub fn poll_mouse_axes(
 	scroll: &AccumulatedMouseScroll,
 	state: &mut ActionState,
 ) {
-	for &(input, action_name) in keymap.axis_bindings() {
-		let Some(signal) = axis_signal(input, motion, scroll) else {
+	for binding in keymap.axis_bindings() {
+		let Some(signal) = axis_signal(binding.input, motion, scroll) else {
 			continue;
 		};
+
+		let signal = binding.scale.apply(signal);
+		let action_name = binding.action;
 
 		// The keymap only binds registered actions of the matching kind, so this is a bug if it
 		// ever fails. Warn once instead of every frame.

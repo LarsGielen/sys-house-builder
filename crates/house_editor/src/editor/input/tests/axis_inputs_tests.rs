@@ -36,3 +36,30 @@ fn each_input_produces_one_exact_relative_kind() {
 fn displays_the_keymap_name() {
 	assert_eq!(AxisInput::MouseMotion.to_string(), "mouse_motion");
 }
+
+#[test]
+fn a_scale_multiplies_each_component_and_a_negative_one_inverts() {
+	assert_eq!(
+		Scale::One(-2.0).apply(Signal::Axis1D(3.0)),
+		Signal::Axis1D(-6.0)
+	);
+	assert_eq!(
+		Scale::Two([0.5, -1.0]).apply(Signal::Axis2D(Vec2::new(4.0, 2.0))),
+		Signal::Axis2D(Vec2::new(2.0, -2.0))
+	);
+}
+
+#[test]
+fn the_identity_scale_leaves_a_value_unchanged() {
+	let kind_1d = ValueKind::Axis1D(AxisMode::Relative);
+	let kind_2d = ValueKind::Axis2D(AxisMode::Relative);
+
+	assert_eq!(
+		Scale::identity(kind_1d).apply(Signal::Axis1D(3.0)),
+		Signal::Axis1D(3.0)
+	);
+	assert_eq!(
+		Scale::identity(kind_2d).apply(Signal::Axis2D(Vec2::new(1.0, 2.0))),
+		Signal::Axis2D(Vec2::new(1.0, 2.0))
+	);
+}

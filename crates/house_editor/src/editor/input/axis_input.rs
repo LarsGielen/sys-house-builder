@@ -1,6 +1,9 @@
 use std::{fmt, str::FromStr};
 
-use crate::editor::input::{AxisMode, ValueKind};
+use bevy::math::Vec2;
+use serde::Deserialize;
+
+use crate::editor::input::{AxisMode, ValueKind, signal::Signal};
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,6 +50,68 @@ impl fmt::Display for AxisInput {
 	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str(self.name())
 	}
+}
+
+/// Multiplies the value of an axis binding: a number for 1D axes and `[x, y]` for 2D axes.
+/// Negative values invert, so there is no separate invert option.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum Scale {
+	One(f32),
+	Two([f32; 2]),
+}
+
+impl Scale {
+	/// The scale that leaves a value of this kind unchanged, for bindings that have none.
+	pub fn identity(kind: ValueKind) -> Self {
+		match kind {
+			ValueKind::Axis2D(_) => Self::Two([1.0, 1.0]),
+			_ => Self::One(1.0),
+		}
+	}
+
+	/// Checks that the scale fits the kind of value it multiplies and cannot silence it: a zero or
+	/// non-finite factor would make the binding do nothing.
+	pub fn validate(self, kind: ValueKind) -> Result<Self, String> {
+		let (fits, factors) = match (self, kind) {
+			(Scale::One(factor), ValueKind::Axis1D(_)) => (true, vec![factor]),
+			(Scale::Two(factors), ValueKind::Axis2D(_)) => (true, factors.to_vec()),
+			(Scale::One(factor), _) => (false, vec![factor]),
+			(Scale::Two(factors), _) => (false, factors.to_vec()),
+		};
+
+		if !fits {
+			return Err(match kind {
+				ValueKind::Axis2D(_) => "a 2D axis needs a scale of the form [x, y]".to_string(),
+				ValueKind::Axis1D(_) => "a 1D axis needs a single number as scale".to_string(),
+				ValueKind::Button => "a button cannot have a scale".to_string(),
+			});
+		}
+		if factors
+			.iter()
+			.any(|factor| !factor.is_finite() || *factor == 0.0)
+		{
+			return Err("a scale must be finite and not zero".to_string());
+		}
+		Ok(self)
+	}
+
+	pub fn apply(self, signal: Signal) -> Signal {
+		match (self, signal) {
+			(Scale::One(factor), Signal::Axis1D(value)) => Signal::Axis1D(value * factor),
+			(Scale::Two([x, y]), Signal::Axis2D(value)) => Signal::Axis2D(value * Vec2::new(x, y)),
+			// The keymap only pairs a scale with a signal of its own shape.
+			_ => signal,
+		}
+	}
+}
+
+/// An axis input bound to an action by name, with the scale applied to its value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AxisBinding {
+	pub input: AxisInput,
+	pub scale: Scale,
+	pub action: &'static str,
 }
 
 #[cfg(test)]

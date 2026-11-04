@@ -101,8 +101,16 @@ fn parses_axis_inputs_into_axis_bindings() {
 	assert_eq!(
 		keymap.axis_bindings(),
 		&[
-			(AxisInput::MouseMotion, "test.look"),
-			(AxisInput::Scroll, "test.zoom")
+			AxisBinding {
+				input: AxisInput::MouseMotion,
+				scale: Scale::Two([1.0, 1.0]),
+				action: "test.look"
+			},
+			AxisBinding {
+				input: AxisInput::Scroll,
+				scale: Scale::One(1.0),
+				action: "test.zoom"
+			}
 		]
 	);
 }
@@ -131,4 +139,86 @@ fn rejects_an_axis_input_bound_twice() {
 	let error = parse_error("[bindings]\n\"test.zoom\" = [\"scroll\", \"scroll\"]");
 
 	assert!(error.contains("bound to both"), "{error}");
+}
+
+#[test]
+fn a_table_entry_without_options_equals_a_plain_entry() {
+	let plain = "[bindings]\n\"test.undo\" = [\"ctrl+z\"]\n\"test.zoom\" = [\"scroll\"]";
+	let table = "[bindings]\n\"test.undo\" = [{ input = \"ctrl+z\" }]\n\"test.zoom\" = [{ input = \"scroll\" }]";
+	let plain = Keymap::parse(plain, &registered_actions()).unwrap();
+	let table = Keymap::parse(table, &registered_actions()).unwrap();
+
+	assert_eq!(plain.button_bindings(), table.button_bindings());
+	assert_eq!(plain.axis_bindings(), table.axis_bindings());
+}
+
+#[test]
+fn plain_and_table_entries_can_be_mixed_in_one_list() {
+	let text = "[bindings]\n\"test.redo\" = [\"ctrl+y\", { input = \"ctrl+shift+z\" }]";
+	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
+
+	assert_eq!(keymap.button_bindings().len(), 2);
+}
+
+#[test]
+fn rejects_unknown_table_fields_and_a_missing_input() {
+	let misspelled = "[bindings]\n\"test.zoom\" = [{ input = \"scroll\", scal = 2.0 }]";
+	assert!(Keymap::parse(misspelled, &registered_actions()).is_err());
+
+	let no_input = "[bindings]\n\"test.zoom\" = [{ scale = 2.0 }]";
+	assert!(Keymap::parse(no_input, &registered_actions()).is_err());
+}
+
+#[test]
+fn parses_scales_for_both_axis_shapes() {
+	let text = "[bindings]\n\"test.look\" = [{ input = \"mouse_motion\", scale = [0.2, -0.2] }]\n\"test.zoom\" = [{ input = \"scroll\", scale = -1.0 }]";
+	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
+
+	let scales: Vec<Scale> = keymap
+		.axis_bindings()
+		.iter()
+		.map(|binding| binding.scale)
+		.collect();
+	assert_eq!(scales, [Scale::Two([0.2, -0.2]), Scale::One(-1.0)]);
+}
+
+#[test]
+fn rejects_a_scale_that_does_not_fit_the_action() {
+	let pair_on_1d =
+		parse_error("[bindings]\n\"test.zoom\" = [{ input = \"scroll\", scale = [1.0, 2.0] }]");
+	assert!(pair_on_1d.contains("test.zoom"), "{pair_on_1d}");
+
+	let number_on_2d =
+		parse_error("[bindings]\n\"test.look\" = [{ input = \"mouse_motion\", scale = 2.0 }]");
+	assert!(number_on_2d.contains("test.look"), "{number_on_2d}");
+
+	let on_shortcut =
+		parse_error("[bindings]\n\"test.undo\" = [{ input = \"ctrl+z\", scale = 2.0 }]");
+	assert!(on_shortcut.contains("scale"), "{on_shortcut}");
+}
+
+#[test]
+fn rejects_scales_that_would_silence_or_break_the_binding() {
+	for scale in ["0.0", "[1.0, 0.0]"] {
+		let input = if scale.starts_with('[') {
+			"mouse_motion"
+		} else {
+			"scroll"
+		};
+		let action = if scale.starts_with('[') {
+			"test.look"
+		} else {
+			"test.zoom"
+		};
+		let text =
+			format!("[bindings]\n\"{action}\" = [{{ input = \"{input}\", scale = {scale} }}]");
+
+		assert!(
+			Keymap::parse(&text, &registered_actions()).is_err(),
+			"{scale}"
+		);
+	}
+
+	let not_a_number = "[bindings]\n\"test.zoom\" = [{ input = \"scroll\", scale = nan }]";
+	assert!(Keymap::parse(not_a_number, &registered_actions()).is_err());
 }
