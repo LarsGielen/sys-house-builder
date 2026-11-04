@@ -1,8 +1,14 @@
 use std::collections::HashSet;
 
-use bevy::{log::warn_once, prelude::*};
+use bevy::{
+	input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
+	log::warn_once,
+	prelude::*,
+};
 
-use crate::editor::input::{ActionState, Keymap, Shortcut, signal::Signal};
+use crate::editor::input::{
+	ActionState, AxisInput, Keymap, Shortcut, signal::Signal, state::SourceId,
+};
 
 /// Turns keyboard and mouse button shortcuts into button contributions.
 ///
@@ -47,170 +53,52 @@ impl ButtonSource {
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate::editor::input::{Action, ActionGroup, ValueKind};
+/// How many pixels one scroll line is worth. Trackpads report pixels and wheels report lines, so
+/// scroll is converted to lines to give actions one unit regardless of the device.
+const PIXELS_PER_LINE: f32 = 40.0;
 
-	#[derive(Clone, Copy)]
-	enum TestAction {
-		Orbit,
-		Pan,
-		Undo,
-	}
+/// Contributes the mouse motion and scroll of this frame to the actions they are bound to.
+pub fn poll_mouse_axes(
+	keymap: &Keymap,
+	motion: &AccumulatedMouseMotion,
+	scroll: &AccumulatedMouseScroll,
+	state: &mut ActionState,
+) {
+	for &(input, action_name) in keymap.axis_bindings() {
+		let Some(signal) = axis_signal(input, motion, scroll) else {
+			continue;
+		};
 
-	impl Action for TestAction {
-		fn name(self) -> &'static str {
-			match self {
-				Self::Orbit => "test.orbit",
-				Self::Pan => "test.pan",
-				Self::Undo => "test.undo",
-			}
+		// The keymap only binds registered actions of the matching kind, so this is a bug if it
+		// ever fails. Warn once instead of every frame.
+		if let Err(error) = state.contribute_named(SourceId::MOUSE, action_name, signal) {
+			warn_once!("cannot contribute to \"{action_name}\": {error:?}");
 		}
-
-		fn value(self) -> ValueKind {
-			ValueKind::Button
-		}
-	}
-
-	impl ActionGroup for TestAction {
-		fn all() -> &'static [Self] {
-			&[Self::Orbit, Self::Pan, Self::Undo]
-		}
-	}
-
-	const KEYMAP: &str = "[bindings]\n\"test.orbit\" = [\"mouse_middle\"]\n\"test.pan\" = [\"shift+mouse_middle\"]\n\"test.undo\" = [\"ctrl+z\", \"ctrl+y\"]";
-
-	/// One simulated app: the devices, the source and the action state it feeds.
-	struct Frames {
-		keys: ButtonInput<KeyCode>,
-		mouse_buttons: ButtonInput<MouseButton>,
-		keymap: Keymap,
-		source: ButtonSource,
-		state: ActionState,
-	}
-
-	impl Frames {
-		fn new() -> Self {
-			let mut state = ActionState::default();
-			state.register_group::<TestAction>();
-			Self {
-				keys: ButtonInput::default(),
-				mouse_buttons: ButtonInput::default(),
-				keymap: Keymap::parse(KEYMAP, &state).unwrap(),
-				source: ButtonSource::default(),
-				state,
-			}
-		}
-
-		/// Runs one frame with the inputs changed since the last one, then clears the one-frame
-		/// flags (`just_pressed`, `just_released`) the way Bevy does at the start of the next frame.
-		fn next(&mut self) {
-			self.state.start_frame();
-			self.source.poll(
-				&self.keymap,
-				&self.keys,
-				&self.mouse_buttons,
-				&mut self.state,
-			);
-			self.state.resolve();
-			self.keys.clear();
-			self.mouse_buttons.clear();
-		}
-	}
-
-	#[test]
-	fn pressing_the_input_starts_the_action() {
-		let mut frames = Frames::new();
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-
-		assert!(frames.state.pressed(TestAction::Orbit));
-		assert!(frames.state.just_pressed(TestAction::Orbit));
-		assert!(!frames.state.pressed(TestAction::Pan));
-	}
-
-	#[test]
-	fn a_held_input_stays_pressed_without_a_new_edge() {
-		let mut frames = Frames::new();
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-		frames.next();
-
-		assert!(frames.state.pressed(TestAction::Orbit));
-		assert!(!frames.state.just_pressed(TestAction::Orbit));
-	}
-
-	#[test]
-	fn a_shortcut_only_starts_with_exactly_its_modifiers() {
-		let mut frames = Frames::new();
-		frames.keys.press(KeyCode::ShiftLeft);
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-
-		assert!(frames.state.pressed(TestAction::Pan));
-		assert!(!frames.state.pressed(TestAction::Orbit));
-	}
-
-	#[test]
-	fn releasing_a_modifier_does_not_end_a_started_shortcut() {
-		let mut frames = Frames::new();
-		frames.keys.press(KeyCode::ShiftLeft);
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-
-		frames.keys.release(KeyCode::ShiftLeft);
-		frames.next();
-
-		assert!(frames.state.pressed(TestAction::Pan));
-		// Orbit would match the bare middle button, but it only starts on the press itself.
-		assert!(!frames.state.pressed(TestAction::Orbit));
-	}
-
-	#[test]
-	fn releasing_the_input_ends_the_action() {
-		let mut frames = Frames::new();
-		frames.keys.press(KeyCode::ShiftLeft);
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-
-		frames.mouse_buttons.release(MouseButton::Middle);
-		frames.next();
-
-		assert!(!frames.state.pressed(TestAction::Pan));
-		assert!(frames.state.just_released(TestAction::Pan));
-	}
-
-	#[test]
-	fn a_modifier_pressed_after_the_input_does_not_turn_it_into_another_shortcut() {
-		let mut frames = Frames::new();
-		frames.mouse_buttons.press(MouseButton::Middle);
-		frames.next();
-
-		frames.keys.press(KeyCode::ShiftLeft);
-		frames.next();
-
-		assert!(frames.state.pressed(TestAction::Orbit));
-		assert!(!frames.state.pressed(TestAction::Pan));
-	}
-
-	#[test]
-	fn an_action_with_two_shortcuts_stays_pressed_until_both_are_released() {
-		let mut frames = Frames::new();
-		frames.keys.press(KeyCode::ControlLeft);
-		frames.keys.press(KeyCode::KeyZ);
-		frames.keys.press(KeyCode::KeyY);
-		frames.next();
-		assert!(frames.state.pressed(TestAction::Undo));
-
-		frames.keys.release(KeyCode::KeyZ);
-		frames.next();
-		assert!(frames.state.pressed(TestAction::Undo));
-		assert!(!frames.state.just_released(TestAction::Undo));
-
-		frames.keys.release(KeyCode::KeyY);
-		frames.next();
-		assert!(!frames.state.pressed(TestAction::Undo));
-		assert!(frames.state.just_released(TestAction::Undo));
 	}
 }
+
+/// The signal of an axis input this frame, or `None` when it did not move
+fn axis_signal(
+	input: AxisInput,
+	motion: &AccumulatedMouseMotion,
+	scroll: &AccumulatedMouseScroll,
+) -> Option<Signal> {
+	match input {
+		AxisInput::MouseMotion => {
+			(motion.delta != Vec2::ZERO).then_some(Signal::Axis2D(motion.delta))
+		}
+
+		// Horizontal scroll is ignored: nothing is bound to it yet.
+		AxisInput::Scroll => {
+			let lines = match scroll.unit {
+				MouseScrollUnit::Line => scroll.delta.y,
+				MouseScrollUnit::Pixel => scroll.delta.y / PIXELS_PER_LINE,
+			};
+			(lines != 0.0).then_some(Signal::Axis1D(lines))
+		}
+	}
+}
+
+#[cfg(test)]
+#[path = "../tests/sources_keyboard_mouse_tests.rs"]
+mod tests;
