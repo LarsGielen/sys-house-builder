@@ -10,7 +10,7 @@ use crate::{
 
 mod camera;
 pub(crate) mod controls;
-mod input;
+pub(crate) mod input;
 
 pub struct EditorPlugin;
 

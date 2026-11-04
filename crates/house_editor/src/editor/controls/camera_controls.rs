@@ -6,10 +6,7 @@ use bevy::{
 	window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use crate::editor::{
-	camera::OrbitCamera,
-	controls::{CameraControl, Keymap},
-};
+use crate::editor::{camera::OrbitCamera, controls::CameraControl, input::Keymap};
 
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.01;
 const PAN_PER_PIXEL: f32 = 0.0011;

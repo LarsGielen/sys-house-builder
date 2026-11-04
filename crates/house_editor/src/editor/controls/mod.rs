@@ -6,9 +6,8 @@ mod camera_controls;
 mod shortcuts;
 
 pub use action_definitions::{ActionTrigger, CameraControl, EditorAction};
-pub use shortcuts::Keymap;
 
-use crate::editor::input::{ActionState, InputAppExt};
+use crate::editor::input::{ActionState, InputAppExt, Keymap};
 
 /// All systems that turn user input into editor changes.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -23,7 +22,10 @@ impl Plugin for ControlsPlugin {
 			.add_input_actions::<CameraControl>();
 
 		app.add_observer(action_handler::handle_action);
-		let keymap = Keymap::load(app.world().resource::<ActionState>());
+		let keymap = Keymap::load(
+			app.world().resource::<ActionState>(),
+			shortcuts::BUILT_IN_KEYMAP,
+		);
 		app.insert_resource(keymap);
 		app.init_resource::<camera_controls::ActiveCameraDrag>();
 		app.add_systems(
