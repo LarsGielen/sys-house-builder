@@ -362,6 +362,7 @@ pub(super) fn trigger_shortcuts(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::editor::controls::EditorAction;
 
 	#[test]
 	fn built_in_keymap_is_valid() {
@@ -452,6 +453,16 @@ mod tests {
 			keymap.camera_control_pressed(&keys, &mouse_buttons),
 			Some(CameraControl::Pan)
 		);
+	}
+
+	#[test]
+	fn finds_all_shortcuts_of_an_action() {
+		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
+		let redo = BoundAction::Editor(EditorAction::Redo);
+		assert_eq!(keymap.shortcuts_for(redo).count(), 2);
+
+		let keymap_without_editor_actions = Keymap::parse(CAMERA_KEYMAP).unwrap();
+		assert_eq!(keymap_without_editor_actions.shortcuts_for(redo).count(), 0);
 	}
 
 	#[test]

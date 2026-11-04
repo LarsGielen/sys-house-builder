@@ -9,7 +9,7 @@ use bevy::{
 };
 
 use crate::{
-	editor::controls::{ActionTrigger, BoundAction},
+	editor::controls::ActionTrigger,
 	ui::{
 		theme::{colors, editor_layout},
 		widgets::tooltip::TooltipText,
@@ -45,11 +45,12 @@ pub struct ButtonOptions {
 	pub color: Option<Color>,
 }
 
-pub fn button(action: BoundAction, options: ButtonOptions) -> impl Scene {
+pub fn button(action: impl Into<ActionTrigger>, options: ButtonOptions) -> impl Scene {
+	let action: ActionTrigger = action.into();
 	let style = options.style.unwrap_or_default();
 	let hint = options.hint;
 	bsn! {
-		ActionTrigger(action)
+		action
 		Button
 		Hovered::default()
 		TabIndex(0)
@@ -69,7 +70,7 @@ pub fn button(action: BoundAction, options: ButtonOptions) -> impl Scene {
 }
 
 pub fn icon_button(
-	action: BoundAction,
+	action: impl Into<ActionTrigger>,
 	icon: Handle<Image>,
 	size: f32,
 	options: ButtonOptions,
@@ -93,10 +94,8 @@ pub fn run_action_on_activate(
 		return;
 	};
 
-	match trigger.0 {
-		BoundAction::Editor(editor_action) => commands.trigger(editor_action),
-		BoundAction::None => {}
-		BoundAction::Camera(_camera_control) => {}
+	if let Some(action) = trigger.0 {
+		action.trigger(&mut commands);
 	}
 }
 

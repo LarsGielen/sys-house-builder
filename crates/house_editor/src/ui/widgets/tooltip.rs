@@ -103,7 +103,8 @@ fn update_tooltip(
 	// Looked up on every show, so the hint follows the keymap if it ever changes at runtime.
 	let shortcut = target
 		.action_trigger
-		.and_then(|trigger| keymap.shortcuts_for(trigger.0).next());
+		.and_then(|trigger| trigger.0)
+		.and_then(|action| keymap.shortcuts_for(action).next());
 	let hint_text = match shortcut {
 		Some(shortcut) => format!("{label} ({shortcut})"),
 		None => label.to_string(),
