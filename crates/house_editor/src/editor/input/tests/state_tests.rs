@@ -31,10 +31,8 @@ impl Action for TestAction {
 
 use TestAction::{Jump, Look, Move, Zoom};
 
-const KEYBOARD: SourceId = SourceId(0);
-const CONTROLLER: SourceId = SourceId(1);
-const UI: SourceId = SourceId(2);
-const MOUSE: SourceId = SourceId(3);
+const CONTROLLER: SourceId = SourceId(3);
+const UI: SourceId = SourceId(4);
 
 fn state_with(actions: &[TestAction]) -> ActionState {
 	let mut state = ActionState::default();
@@ -80,7 +78,10 @@ fn a_held_button_is_just_pressed_only_on_the_first_frame() {
 fn a_source_that_stops_contributing_releases_the_button() {
 	let mut state = state_with(&[Jump]);
 
-	frame(&mut state, &[(KEYBOARD, Jump, Signal::Button(true))]);
+	frame(
+		&mut state,
+		&[(SourceId::KEYBOARD, Jump, Signal::Button(true))],
+	);
 	assert!(state.pressed(Jump));
 	assert!(state.just_pressed(Jump));
 
@@ -100,7 +101,7 @@ fn a_button_stays_pressed_while_any_source_holds_it() {
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Jump, Signal::Button(true)),
+			(SourceId::KEYBOARD, Jump, Signal::Button(true)),
 			(UI, Jump, Signal::Button(true)),
 		],
 	);
@@ -119,13 +120,16 @@ fn a_button_stays_pressed_while_any_source_holds_it() {
 fn a_second_source_pressing_does_not_count_as_a_new_press() {
 	let mut state = state_with(&[Jump]);
 
-	frame(&mut state, &[(KEYBOARD, Jump, Signal::Button(true))]);
+	frame(
+		&mut state,
+		&[(SourceId::KEYBOARD, Jump, Signal::Button(true))],
+	);
 	assert!(state.just_pressed(Jump));
 
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Jump, Signal::Button(true)),
+			(SourceId::KEYBOARD, Jump, Signal::Button(true)),
 			(UI, Jump, Signal::Button(true)),
 		],
 	);
@@ -137,7 +141,10 @@ fn a_second_source_pressing_does_not_count_as_a_new_press() {
 fn a_contribution_of_false_is_the_same_as_not_contributing() {
 	let mut state = state_with(&[Jump]);
 
-	frame(&mut state, &[(KEYBOARD, Jump, Signal::Button(false))]);
+	frame(
+		&mut state,
+		&[(SourceId::KEYBOARD, Jump, Signal::Button(false))],
+	);
 	assert!(!state.pressed(Jump));
 	assert!(!state.just_pressed(Jump));
 }
@@ -147,7 +154,7 @@ fn contributing_to_an_unregistered_action_is_an_error_and_changes_nothing() {
 	let mut state = ActionState::default();
 
 	state.start_frame();
-	let result = state.contribute(KEYBOARD, Jump, Signal::Button(true));
+	let result = state.contribute(SourceId::KEYBOARD, Jump, Signal::Button(true));
 	state.resolve();
 
 	assert!(matches!(result, Err(ContributionError::Unregistered)));
@@ -159,9 +166,9 @@ fn contributing_the_wrong_signal_kind_is_an_error_and_changes_nothing() {
 	let mut state = state_with(&[Jump, Move]);
 
 	state.start_frame();
-	let axis_to_button = state.contribute(KEYBOARD, Jump, Signal::Axis1D(1.0));
-	let button_to_axis = state.contribute(KEYBOARD, Move, Signal::Button(true));
-	let wrong_dimension = state.contribute(KEYBOARD, Move, Signal::Axis1D(1.0));
+	let axis_to_button = state.contribute(SourceId::KEYBOARD, Jump, Signal::Axis1D(1.0));
+	let button_to_axis = state.contribute(SourceId::KEYBOARD, Move, Signal::Button(true));
+	let wrong_dimension = state.contribute(SourceId::KEYBOARD, Move, Signal::Axis1D(1.0));
 	state.resolve();
 
 	assert!(matches!(axis_to_button, Err(ContributionError::WrongKind)));
@@ -177,7 +184,7 @@ fn a_rejected_contribution_does_not_affect_valid_ones_in_the_same_frame() {
 
 	state.start_frame();
 	state
-		.contribute(KEYBOARD, Jump, Signal::Button(true))
+		.contribute(SourceId::KEYBOARD, Jump, Signal::Button(true))
 		.unwrap();
 	assert!(state.contribute(UI, Jump, Signal::Axis1D(1.0)).is_err());
 	state.resolve();
@@ -191,7 +198,11 @@ fn an_axis_passes_a_single_source_through() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 	assert_eq!(state.axis2d(Move), Vec2::new(1.0, 0.0));
 }
@@ -202,7 +213,11 @@ fn an_axis_returns_to_neutral_when_the_source_stops_contributing() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 	frame(&mut state, &[]);
 	assert_eq!(state.axis2d(Move), Vec2::ZERO);
@@ -216,7 +231,11 @@ fn an_axis_never_sums_two_sources() {
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0))),
+			(
+				SourceId::KEYBOARD,
+				Move,
+				Signal::Axis2D(Vec2::new(1.0, 0.0)),
+			),
 			(CONTROLLER, Move, Signal::Axis2D(Vec2::new(0.0, 1.0))),
 		],
 	);
@@ -229,7 +248,11 @@ fn the_first_source_to_leave_neutral_owns_the_axis() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 
 	// The controller is listed first, so a pass would only win by order, not by ownership.
@@ -237,7 +260,11 @@ fn the_first_source_to_leave_neutral_owns_the_axis() {
 		&mut state,
 		&[
 			(CONTROLLER, Move, Signal::Axis2D(Vec2::new(0.0, 1.0))),
-			(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0))),
+			(
+				SourceId::KEYBOARD,
+				Move,
+				Signal::Axis2D(Vec2::new(1.0, 0.0)),
+			),
 		],
 	);
 	assert_eq!(state.axis2d(Move), Vec2::new(1.0, 0.0));
@@ -249,12 +276,20 @@ fn an_owner_keeps_the_axis_until_it_returns_to_neutral() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Move, Signal::Axis2D(Vec2::new(0.5, 0.0))),
+			(
+				SourceId::KEYBOARD,
+				Move,
+				Signal::Axis2D(Vec2::new(0.5, 0.0)),
+			),
 			(CONTROLLER, Move, Signal::Axis2D(Vec2::new(0.0, 1.0))),
 		],
 	);
@@ -267,7 +302,11 @@ fn another_source_can_take_over_in_the_frame_the_owner_returns_to_neutral() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 
 	// Same-frame handover (recommended). If you choose a one-frame gap instead, the
@@ -275,7 +314,7 @@ fn another_source_can_take_over_in_the_frame_the_owner_returns_to_neutral() {
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Move, Signal::Axis2D(Vec2::ZERO)),
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::ZERO)),
 			(CONTROLLER, Move, Signal::Axis2D(Vec2::new(0.0, 1.0))),
 		],
 	);
@@ -288,7 +327,11 @@ fn a_source_that_stops_contributing_gives_up_ownership() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 	frame(&mut state, &[]);
 	assert_eq!(state.axis2d(Move), Vec2::ZERO);
@@ -306,12 +349,20 @@ fn a_non_owner_at_neutral_does_not_disturb_the_owner() {
 
 	frame(
 		&mut state,
-		&[(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0)))],
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(1.0, 0.0)),
+		)],
 	);
 	frame(
 		&mut state,
 		&[
-			(KEYBOARD, Move, Signal::Axis2D(Vec2::new(1.0, 0.0))),
+			(
+				SourceId::KEYBOARD,
+				Move,
+				Signal::Axis2D(Vec2::new(1.0, 0.0)),
+			),
 			(CONTROLLER, Move, Signal::Axis2D(Vec2::ZERO)),
 		],
 	);
@@ -324,7 +375,7 @@ fn a_relative_axis_reports_this_frames_delta_and_resets_to_zero() {
 
 	frame(
 		&mut state,
-		&[(MOUSE, Look, Signal::Axis2D(Vec2::new(3.0, -2.0)))],
+		&[(SourceId::MOUSE, Look, Signal::Axis2D(Vec2::new(3.0, -2.0)))],
 	);
 	assert_eq!(state.axis2d(Look), Vec2::new(3.0, -2.0));
 
@@ -337,7 +388,7 @@ fn a_relative_axis_reports_this_frames_delta_and_resets_to_zero() {
 fn a_one_dimensional_axis_works_like_the_two_dimensional_one() {
 	let mut state = state_with(&[Zoom]);
 
-	frame(&mut state, &[(MOUSE, Zoom, Signal::Axis1D(1.0))]);
+	frame(&mut state, &[(SourceId::MOUSE, Zoom, Signal::Axis1D(1.0))]);
 	assert_eq!(state.axis1d(Zoom), 1.0);
 
 	frame(&mut state, &[]);
@@ -369,7 +420,10 @@ fn querying_an_unregistered_action_returns_neutral_values() {
 fn registering_an_action_again_resets_its_slot() {
 	let mut state = state_with(&[Jump]);
 
-	frame(&mut state, &[(KEYBOARD, Jump, Signal::Button(true))]);
+	frame(
+		&mut state,
+		&[(SourceId::KEYBOARD, Jump, Signal::Button(true))],
+	);
 	state.register(Jump);
 	assert!(!state.pressed(Jump));
 }

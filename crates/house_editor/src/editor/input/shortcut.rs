@@ -2,6 +2,8 @@ use std::{fmt, str::FromStr};
 
 use bevy::prelude::*;
 
+use crate::editor::input::state::SourceId;
+
 const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("a", KeyCode::KeyA),
 	("b", KeyCode::KeyB),
@@ -70,7 +72,7 @@ const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
 	("mouse_right", MouseButton::Right),
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ShortcutInput {
 	Key(KeyCode),
 	Mouse(MouseButton),
@@ -125,7 +127,7 @@ impl ShortcutInput {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shortcut {
 	input: ShortcutInput,
 	ctrl: bool,
@@ -154,6 +156,13 @@ impl Shortcut {
 		mouse_buttons: &ButtonInput<MouseButton>,
 	) -> bool {
 		self.input.pressed(keys, mouse_buttons)
+	}
+
+	pub(crate) fn source(&self) -> SourceId {
+		match self.input {
+			ShortcutInput::Key(_) => SourceId::KEYBOARD,
+			ShortcutInput::Mouse(_) => SourceId::MOUSE,
+		}
 	}
 }
 

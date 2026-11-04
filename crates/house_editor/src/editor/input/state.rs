@@ -13,6 +13,11 @@ use crate::editor::input::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(u32);
 
+impl SourceId {
+	pub const KEYBOARD: SourceId = Self(0);
+	pub const MOUSE: Self = Self(1);
+}
+
 struct ActionSlot {
 	value_kind: ValueKind,
 	signal: Signal,
@@ -21,15 +26,15 @@ struct ActionSlot {
 	owner: Option<SourceId>,
 }
 
-#[derive(Default, Resource)]
-pub struct ActionState {
-	slots: HashMap<&'static str, ActionSlot>,
-}
-
 #[derive(Debug)]
 pub enum ContributionError {
 	Unregistered,
 	WrongKind,
+}
+
+#[derive(Default, Resource)]
+pub struct ActionState {
+	slots: HashMap<&'static str, ActionSlot>,
 }
 
 impl ActionState {
@@ -70,7 +75,16 @@ impl ActionState {
 		action: impl Action,
 		signal: Signal,
 	) -> Result<(), ContributionError> {
-		let Some(slot) = self.slots.get_mut(action.name()) else {
+		self.contribute_named(source, action.name(), signal)
+	}
+
+	pub fn contribute_named(
+		&mut self,
+		source: SourceId,
+		name: &str,
+		signal: Signal,
+	) -> Result<(), ContributionError> {
+		let Some(slot) = self.slots.get_mut(name) else {
 			return Err(ContributionError::Unregistered);
 		};
 

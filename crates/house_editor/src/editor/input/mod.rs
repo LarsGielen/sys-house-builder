@@ -4,6 +4,7 @@ mod action;
 mod keymap;
 mod shortcut;
 mod signal;
+mod sources;
 mod state;
 
 pub use action::{Action, ActionGroup};
