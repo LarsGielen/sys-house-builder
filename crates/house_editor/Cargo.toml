@@ -7,5 +7,3 @@ edition = "2024"
 bevy = "0.20.1"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"
-wall_graph = { path = "../wall_graph" }
-wall_mesh = { path = "../wall_mesh" }

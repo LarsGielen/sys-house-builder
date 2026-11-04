@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-	editor::controls::EditorAction,
+	editor::controls::{BoundAction, EditorAction},
 	ui::{
 		icons::{Icon, Icons},
 		theme::{colors, editor_layout, spacing},
@@ -23,19 +23,19 @@ pub(super) fn top_bar(icons: &Icons) -> impl Scene + use<> {
 		BackgroundColor(colors::SURFACE)
 		BorderColor::all(colors::BORDER)
 		Children [
-			@icon_button(EditorAction::None, icons.get(Icon::House), size, ButtonOptions { ..default() })
+			@icon_button(BoundAction::None, icons.get(Icon::House), size, ButtonOptions { ..default() })
 			--
 			@separator_vertical()
 			--
-			@icon_button(EditorAction::Undo, icons.get(Icon::Undo), size, ButtonOptions { hint: Some("Undo"), ..default() })
+			@icon_button(BoundAction::Editor(EditorAction::Undo), icons.get(Icon::Undo), size, ButtonOptions { hint: Some("Undo"), ..default() })
 			--
-			@icon_button(EditorAction::Redo, icons.get(Icon::Redo), size, ButtonOptions { hint: Some("Redo"), ..default() })
+			@icon_button(BoundAction::Editor(EditorAction::Redo), icons.get(Icon::Redo), size, ButtonOptions { hint: Some("Redo"), ..default() })
 			--
 			@separator_vertical()
 			--
-			@icon_button(EditorAction::Save, icons.get(Icon::Save), size, ButtonOptions { hint: Some("Save"), ..default() })
+			@icon_button(BoundAction::Editor(EditorAction::Save), icons.get(Icon::Save), size, ButtonOptions { hint: Some("Save"), ..default() })
 			--
-			@icon_button(EditorAction::Open, icons.get(Icon::Open), size, ButtonOptions { hint: Some("Open"), ..default() })
+			@icon_button(BoundAction::Editor(EditorAction::Open), icons.get(Icon::Open), size, ButtonOptions { hint: Some("Open"), ..default() })
 		]
 	}
 }

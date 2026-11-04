@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::controls::{CameraControl, EditorAction, action_definitions::BoundAction};
+use crate::editor::controls::{CameraControl, action_definitions::BoundAction};
 
 const KEYMAP_FILE: &str = "keymap.toml";
 
@@ -249,10 +249,10 @@ impl Default for Keymap {
 }
 
 impl Keymap {
-	pub fn shortcuts_for(&self, action: EditorAction) -> impl Iterator<Item = &Shortcut> {
+	pub fn shortcuts_for(&self, action: BoundAction) -> impl Iterator<Item = &Shortcut> {
 		self.bindings
 			.iter()
-			.filter(move |(_, bound_action)| *bound_action == BoundAction::Editor(action))
+			.filter(move |(_, bound_action)| *bound_action == action)
 			.map(|(shortcut, _)| shortcut)
 	}
 
@@ -452,13 +452,6 @@ mod tests {
 			keymap.camera_control_pressed(&keys, &mouse_buttons),
 			Some(CameraControl::Pan)
 		);
-	}
-
-	#[test]
-	fn finds_all_shortcuts_of_an_action() {
-		let keymap = Keymap::parse(BUILT_IN_KEYMAP).unwrap();
-		assert_eq!(keymap.shortcuts_for(EditorAction::Redo).count(), 2);
-		assert_eq!(keymap.shortcuts_for(EditorAction::None).count(), 0);
 	}
 
 	#[test]

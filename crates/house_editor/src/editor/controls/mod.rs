@@ -5,7 +5,7 @@ mod action_handler;
 mod camera_controls;
 mod shortcuts;
 
-pub use action_definitions::{ActionTrigger, CameraControl, EditorAction};
+pub use action_definitions::{ActionTrigger, BoundAction, CameraControl, EditorAction};
 pub use shortcuts::Keymap;
 
 /// All systems that turn user input into editor changes.
