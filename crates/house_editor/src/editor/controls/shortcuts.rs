@@ -70,6 +70,7 @@ mod tests {
 	fn built_in_keymap_is_valid() {
 		let keymap = Keymap::parse(BUILT_IN_KEYMAP, &registered_actions()).unwrap();
 		assert_eq!(keymap.button_bindings().len(), 7);
+		assert_eq!(keymap.axis_bindings().len(), 2);
 	}
 
 	// Fixed here instead of read from the built-in keymap, whose default bindings may change.

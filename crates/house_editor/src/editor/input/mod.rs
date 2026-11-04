@@ -15,7 +15,8 @@ pub use shortcut::Shortcut;
 pub use signal::{AxisMode, ValueKind};
 pub use state::ActionState;
 
-use sources::ButtonSource;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
+use sources::{ButtonSource, poll_mouse_axes};
 
 /// The phases of one input frame, in order. Source systems belong in `Sources`; consumers
 /// read the resolved state in `Update` or later, so they never see a half-built frame.
@@ -67,6 +68,12 @@ impl Plugin for InputPlugin {
 				.in_set(ActionSystems::Sources)
 				.run_if(resource_exists::<Keymap>),
 		);
+		app.add_systems(
+			PreUpdate,
+			poll_axes
+				.in_set(ActionSystems::Sources)
+				.run_if(resource_exists::<Keymap>),
+		);
 		app.add_systems(PreUpdate, resolve_frame.in_set(ActionSystems::Resolve));
 	}
 }
@@ -89,6 +96,15 @@ fn poll_buttons(
 	source.poll(&keymap, &keys, &mouse_buttons, &mut state);
 }
 
+fn poll_axes(
+	keymap: Res<Keymap>,
+	motion: Res<AccumulatedMouseMotion>,
+	scroll: Res<AccumulatedMouseScroll>,
+	mut state: ResMut<ActionState>,
+) {
+	poll_mouse_axes(&keymap, &motion, &scroll, &mut state);
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -96,21 +112,31 @@ mod tests {
 	#[derive(Clone, Copy)]
 	enum TestAction {
 		Jump,
+		Look,
+		Zoom,
 	}
 
 	impl Action for TestAction {
 		fn name(self) -> &'static str {
-			"test.jump"
+			match self {
+				Self::Jump => "test.jump",
+				Self::Look => "test.look",
+				Self::Zoom => "test.zoom",
+			}
 		}
 
 		fn value(self) -> ValueKind {
-			ValueKind::Button
+			match self {
+				Self::Jump => ValueKind::Button,
+				Self::Look => ValueKind::Axis2D(AxisMode::Relative),
+				Self::Zoom => ValueKind::Axis1D(AxisMode::Relative),
+			}
 		}
 	}
 
 	impl ActionGroup for TestAction {
 		fn all() -> &'static [Self] {
-			&[Self::Jump]
+			&[Self::Jump, Self::Look, Self::Zoom]
 		}
 	}
 
@@ -118,6 +144,8 @@ mod tests {
 		let mut app = App::new();
 		app.init_resource::<ButtonInput<KeyCode>>()
 			.init_resource::<ButtonInput<MouseButton>>()
+			.init_resource::<AccumulatedMouseMotion>()
+			.init_resource::<AccumulatedMouseScroll>()
 			.add_plugins(InputPlugin)
 			.add_input_actions::<TestAction>();
 		app
@@ -174,6 +202,71 @@ mod tests {
 			!app.world()
 				.resource::<ActionState>()
 				.pressed(TestAction::Jump)
+		);
+	}
+
+	const AXIS_KEYMAP: &str =
+		"[bindings]\n\"test.look\" = [\"mouse_motion\"]\n\"test.zoom\" = [\"scroll\"]";
+
+	fn app_with_axis_keymap() -> App {
+		let mut app = app_with_devices();
+		let keymap = Keymap::parse(AXIS_KEYMAP, app.world().resource::<ActionState>()).unwrap();
+		app.insert_resource(keymap);
+		app
+	}
+
+	#[test]
+	fn mouse_motion_reaches_the_action_state_for_one_frame() {
+		let mut app = app_with_axis_keymap();
+
+		app.world_mut()
+			.resource_mut::<AccumulatedMouseMotion>()
+			.delta = Vec2::new(3.0, -2.0);
+		run_input_frame(&mut app);
+		assert_eq!(
+			app.world()
+				.resource::<ActionState>()
+				.axis2d(TestAction::Look),
+			Vec2::new(3.0, -2.0)
+		);
+
+		// Bevy zeroes the accumulated delta every frame, and the action must follow.
+		app.world_mut()
+			.resource_mut::<AccumulatedMouseMotion>()
+			.delta = Vec2::ZERO;
+		run_input_frame(&mut app);
+		assert_eq!(
+			app.world()
+				.resource::<ActionState>()
+				.axis2d(TestAction::Look),
+			Vec2::ZERO
+		);
+	}
+
+	#[test]
+	fn scroll_reaches_the_action_state_for_one_frame() {
+		let mut app = app_with_axis_keymap();
+
+		app.world_mut()
+			.resource_mut::<AccumulatedMouseScroll>()
+			.delta = Vec2::new(0.0, 2.0);
+		run_input_frame(&mut app);
+		assert_eq!(
+			app.world()
+				.resource::<ActionState>()
+				.axis1d(TestAction::Zoom),
+			2.0
+		);
+
+		app.world_mut()
+			.resource_mut::<AccumulatedMouseScroll>()
+			.delta = Vec2::ZERO;
+		run_input_frame(&mut app);
+		assert_eq!(
+			app.world()
+				.resource::<ActionState>()
+				.axis1d(TestAction::Zoom),
+			0.0
 		);
 	}
 }

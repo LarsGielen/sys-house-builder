@@ -9,3 +9,7 @@
 # Held controls. Modifiers only choose the control when it starts, so releasing one mid-drag keeps it going.
 "camera.orbit" = ["mouse_right"]
 "camera.pan" = ["shift+mouse_right"]
+
+# Mouse axes. Motion drives looking and scroll drives zooming; modifiers are not supported on them yet.
+"camera.look" = ["mouse_motion"]
+"camera.zoom" = ["scroll"]

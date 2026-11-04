@@ -107,7 +107,7 @@ impl Action for CameraAction {
 			CameraAction::Orbit => "camera.orbit",
 			CameraAction::Pan => "camera.pan",
 			CameraAction::Look => "camera.look",
-			CameraAction::Zoom => "camera.scroll",
+			CameraAction::Zoom => "camera.zoom",
 		}
 	}
 
