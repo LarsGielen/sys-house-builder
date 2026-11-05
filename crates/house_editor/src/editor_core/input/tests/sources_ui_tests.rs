@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor::input::{
+use crate::editor_core::input::{
 	ActionGroup, ActionState, AxisMode, InputAppExt, InputPlugin, ValueKind, action::Action,
 };
 

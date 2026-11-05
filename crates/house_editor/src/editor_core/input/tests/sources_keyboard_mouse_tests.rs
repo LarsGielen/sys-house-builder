@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor::input::{Action, ActionGroup, ValueKind};
+use crate::editor_core::input::{Action, ActionGroup, ValueKind};
 
 #[derive(Clone, Copy)]
 enum TestAction {

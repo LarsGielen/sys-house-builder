@@ -1,5 +1,7 @@
 use super::*;
-use crate::editor::input::{ActionGroup, ShortcutInput, modifiers::Modifiers, signal::AxisMode};
+use crate::editor_core::input::{
+	Action, ActionGroup, ShortcutInput, modifiers::Modifiers, signal::AxisMode,
+};
 
 #[derive(Clone, Copy)]
 enum TestAction {

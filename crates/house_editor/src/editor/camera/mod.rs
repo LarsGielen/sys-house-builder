@@ -1,14 +1,32 @@
 use bevy::prelude::*;
 
-/// Systems that apply the `OrbitCamera` state to the camera. Whatever changes that state must run before this set.
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct OrbitCameraSystems;
+use crate::{
+	editor::camera::{
+		controls::{ActiveCameraDrag, update_camera_controls, update_cursor_lock},
+		input::CameraAction,
+	},
+	editor_core::input::InputAppExt,
+};
+
+mod controls;
+mod input;
 
 pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, update_camera_transform.in_set(OrbitCameraSystems));
+		// The keymap binds shortcuts by action name, to the actions must be registerd before it loads
+		app.add_input_actions::<CameraAction>();
+		app.init_resource::<ActiveCameraDrag>();
+		app.add_systems(
+			Update,
+			(
+				update_camera_controls,
+				update_cursor_lock.run_if(resource_changed::<ActiveCameraDrag>),
+				update_camera_transform,
+			)
+				.chain(),
+		);
 	}
 }
 
@@ -60,7 +78,7 @@ impl OrbitCamera {
 	}
 }
 
-fn update_camera_transform(
+pub fn update_camera_transform(
 	mut orbit_cameras: Query<(&mut Transform, &OrbitCamera), Changed<OrbitCamera>>,
 ) {
 	for (mut transform, orbit_camera) in &mut orbit_cameras {

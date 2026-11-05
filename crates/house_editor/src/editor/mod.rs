@@ -3,28 +3,30 @@ use bevy::{camera::RenderTarget, prelude::*, render::render_resource::TextureFor
 use crate::{
 	app_state::AppState,
 	editor::{
-		camera::{OrbitCamera, OrbitCameraPlugin, OrbitCameraSystems},
-		controls::ControlsSystems,
+		camera::{OrbitCamera, OrbitCameraPlugin},
+		inputs::EditorInputPlugin,
 	},
+	editor_core::input::{ActionState, InputPlugin, Keymap},
 };
 
 mod camera;
-pub(crate) mod controls;
-pub(crate) mod input;
+pub mod inputs;
 
 pub struct EditorPlugin;
-
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((
-			input::InputPlugin,
-			controls::ControlsPlugin,
-			OrbitCameraPlugin,
-		));
-		app.configure_sets(Update, (ControlsSystems, OrbitCameraSystems).chain()); // Input must be applied before the camera reads it, or the transform lags a frame.
+		app.add_plugins(InputPlugin);
+
+		app.add_plugins(EditorInputPlugin);
+		app.add_plugins(OrbitCameraPlugin);
 
 		app.add_systems(OnEnter(AppState::Editor), setup_editor);
 		app.add_systems(OnExit(AppState::Editor), remove_viewport_camera);
+
+		app.insert_resource(Keymap::load(
+			app.world().resource::<ActionState>(),
+			include_str!("../../assets/keymap.toml"),
+		));
 	}
 }
 

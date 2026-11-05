@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use bevy::prelude::*;
 
-use crate::editor::input::{modifiers::Modifiers, state::SourceId};
+use crate::editor_core::input::{modifiers::Modifiers, state::SourceId};
 
 const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("a", KeyCode::KeyA),

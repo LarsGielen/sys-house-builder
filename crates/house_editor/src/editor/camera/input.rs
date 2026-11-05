@@ -1,40 +1,4 @@
-use bevy::prelude::*;
-
-use crate::editor::input::{Action, ActionGroup, AxisMode, ValueKind};
-
-// ## EditorAction ## //
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Event)]
-pub enum EditorAction {
-	Undo,
-	Redo,
-	Save,
-	Open,
-}
-
-impl Action for EditorAction {
-	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
-	fn name(self) -> &'static str {
-		match self {
-			EditorAction::Undo => "editor.undo",
-			EditorAction::Redo => "editor.redo",
-			EditorAction::Save => "editor.save",
-			EditorAction::Open => "editor.open",
-		}
-	}
-
-	fn value(self) -> ValueKind {
-		ValueKind::Button
-	}
-}
-
-impl ActionGroup for EditorAction {
-	fn all() -> &'static [Self] {
-		&[Self::Undo, Self::Redo, Self::Save, Self::Open]
-	}
-}
-
-// ## CameraControl ## //
+use crate::editor_core::input::{Action, ActionGroup, AxisMode, ValueKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CameraAction {

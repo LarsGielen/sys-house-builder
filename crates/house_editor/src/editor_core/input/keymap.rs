@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
-use crate::editor::input::{
-	Action, ActionState, AxisBinding, AxisInput, Scale, Shortcut, ShortcutInput, ValueKind,
+use crate::editor_core::input::{
+	ActionState, AxisBinding, AxisInput, Scale, Shortcut, ShortcutInput, ValueKind,
 	modifiers::Modifiers,
 };
 

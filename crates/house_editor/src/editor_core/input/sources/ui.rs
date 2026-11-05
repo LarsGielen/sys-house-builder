@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::editor::input::{Action, ActionState, signal::Signal, state::SourceId};
+use crate::editor_core::input::{Action, ActionState, signal::Signal, state::SourceId};
 
 #[derive(Event)]
 pub struct UiActivated {
@@ -10,7 +10,7 @@ pub struct UiActivated {
 
 // Buffers an activation from `Update` until the sources run in the next `PreUpdate`.
 #[derive(Message)]
-pub(in crate::editor::input) struct UiActivatedMessage {
+pub(in crate::editor_core::input) struct UiActivatedMessage {
 	action: &'static str,
 	signal: Signal,
 }
@@ -34,7 +34,7 @@ impl UiActivated {
 	}
 }
 
-pub(in crate::editor::input) fn handle_ui_activations(
+pub(in crate::editor_core::input) fn handle_ui_activations(
 	activation: On<UiActivated>,
 	mut activations: MessageWriter<UiActivatedMessage>,
 ) {
@@ -44,7 +44,7 @@ pub(in crate::editor::input) fn handle_ui_activations(
 	});
 }
 
-pub(in crate::editor::input) fn poll_ui_activations(
+pub(in crate::editor_core::input) fn poll_ui_activations(
 	mut message_reader: MessageReader<UiActivatedMessage>,
 	mut state: ResMut<ActionState>,
 ) {

@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod app_state;
 mod editor;
+mod editor_core;
 mod ui;
 
 fn main() {
