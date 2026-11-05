@@ -10,7 +10,7 @@ impl Plugin for EditorInputPlugin {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Event)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorAction {
 	Undo,
 	Redo,

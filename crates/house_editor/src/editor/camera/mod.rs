@@ -15,7 +15,7 @@ pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
 	fn build(&self, app: &mut App) {
-		// The keymap binds shortcuts by action name, to the actions must be registerd before it loads
+		// The keymap binds shortcuts by action name, so the actions must be registerd before it loads
 		app.add_input_actions::<CameraAction>();
 		app.init_resource::<ActiveCameraDrag>();
 		app.add_systems(
