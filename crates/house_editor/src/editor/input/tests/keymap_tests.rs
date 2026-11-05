@@ -257,3 +257,18 @@ fn rejects_scales_that_would_silence_or_break_the_binding() {
 	let not_a_number = "[bindings]\n\"test.zoom\" = [{ input = \"scroll\", scale = nan }]";
 	assert!(Keymap::parse(not_a_number, &registered_actions()).is_err());
 }
+
+#[test]
+fn reports_the_actions_a_keymap_leaves_unbound_compared_to_the_defaults() {
+	let defaults = "[bindings]\n\"test.undo\" = [\"ctrl+z\"]\n\"test.redo\" = [\"ctrl+y\"]\n\"test.look\" = [\"mouse_motion\"]\n\"test.zoom\" = [\"scroll\"]";
+	let older = "[bindings]\n\"test.undo\" = [\"ctrl+u\"]\n\"test.zoom\" = [\"shift+scroll\"]";
+	let defaults = Keymap::parse(defaults, &registered_actions()).unwrap();
+	let older = Keymap::parse(older, &registered_actions()).unwrap();
+
+	// Rebinding an action is not a problem; only an action without any binding is.
+	assert_eq!(
+		older.actions_unbound_compared_to(&defaults),
+		["test.look", "test.redo"]
+	);
+	assert!(defaults.actions_unbound_compared_to(&defaults).is_empty());
+}

@@ -71,6 +71,31 @@ impl Keymap {
 			.map(|(shortcut, _)| shortcut)
 	}
 
+	/// The actions that `defaults` binds and this keymap leaves without any binding, sorted. A user
+	/// may remove a binding on purpose, so this is only reported, never filled in.
+	pub(crate) fn actions_unbound_compared_to(&self, defaults: &Keymap) -> Vec<&'static str> {
+		let is_bound = |name: &str| {
+			self.button_bindings
+				.iter()
+				.any(|(_, bound_name)| *bound_name == name)
+				|| self
+					.axis_bindings
+					.iter()
+					.any(|binding| binding.action == name)
+		};
+
+		let mut unbound: Vec<&'static str> = defaults
+			.button_bindings
+			.iter()
+			.map(|(_, name)| *name)
+			.chain(defaults.axis_bindings.iter().map(|binding| binding.action))
+			.filter(|name| !is_bound(name))
+			.collect();
+		unbound.sort_unstable();
+		unbound.dedup();
+		unbound
+	}
+
 	/// Reads the keymap from the assets folder, falling back to `built_in` if the file is missing
 	/// or invalid so that a broken file never leaves the app without shortcuts.
 	///
@@ -89,8 +114,19 @@ impl Keymap {
 				return Self::parse_built_in(built_in, actions);
 			}
 		};
+
 		match Self::parse(&text, actions) {
-			Ok(keymap) => keymap,
+			Ok(keymap) => {
+				// A file written before an action existed would leave it silently unbound.
+				let defaults = Self::parse_built_in(built_in, actions);
+				for name in keymap.actions_unbound_compared_to(&defaults) {
+					warn!(
+						"{} has no binding for \"{name}\", which the built-in keymap binds",
+						path.display()
+					);
+				}
+				keymap
+			}
 			Err(error) => {
 				warn!("invalid {}: {error}; using built-in keymap", path.display());
 				Self::parse_built_in(built_in, actions)
