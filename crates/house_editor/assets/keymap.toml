@@ -10,6 +10,7 @@
 "camera.orbit" = ["mouse_right"]
 "camera.pan" = ["shift+mouse_right"]
 
-# Mouse axes. Motion drives looking and scroll drives zooming; modifiers are not supported on them yet.
+# Mouse axes. Motion drives looking and scroll drives zooming. Modifiers work as for shortcuts and
+# must match exactly, so "scroll" stops while Shift is held and "shift+scroll" can take over.
 "camera.look" = ["mouse_motion"]
 "camera.zoom" = ["scroll"]

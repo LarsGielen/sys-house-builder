@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor::input::{ActionGroup, signal::AxisMode};
+use crate::editor::input::{ActionGroup, modifiers::Modifiers, signal::AxisMode};
 
 #[derive(Clone, Copy)]
 enum TestAction {
@@ -103,11 +103,13 @@ fn parses_axis_inputs_into_axis_bindings() {
 		&[
 			AxisBinding {
 				input: AxisInput::MouseMotion,
+				modifiers: Modifiers::default(),
 				scale: Scale::Two([1.0, 1.0]),
 				action: "test.look"
 			},
 			AxisBinding {
 				input: AxisInput::Scroll,
+				modifiers: Modifiers::default(),
 				scale: Scale::One(1.0),
 				action: "test.zoom"
 			}
@@ -128,10 +130,43 @@ fn rejects_an_axis_input_whose_kind_does_not_match_the_action() {
 }
 
 #[test]
-fn rejects_modifiers_on_axis_inputs() {
-	let error = parse_error("[bindings]\n\"test.zoom\" = [\"shift+scroll\"]");
+fn parses_modifiers_on_axis_inputs() {
+	let text = "[bindings]\n\"test.look\" = [\"ctrl+alt+mouse_motion\"]\n\"test.zoom\" = [\"Shift+scroll\"]";
+	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
 
-	assert!(error.contains("modifiers"), "{error}");
+	let modifiers: Vec<Modifiers> = keymap
+		.axis_bindings()
+		.iter()
+		.map(|binding| binding.modifiers)
+		.collect();
+	assert_eq!(
+		modifiers,
+		["ctrl+alt".parse().unwrap(), "shift".parse().unwrap()]
+	);
+}
+
+#[test]
+fn rejects_unknown_and_repeated_modifiers_on_axis_inputs() {
+	let unknown = parse_error("[bindings]\n\"test.zoom\" = [\"meta+scroll\"]");
+	assert!(unknown.contains("meta"), "{unknown}");
+
+	let repeated = parse_error("[bindings]\n\"test.zoom\" = [\"shift+shift+scroll\"]");
+	assert!(repeated.contains("repeated"), "{repeated}");
+}
+
+#[test]
+fn the_same_axis_input_can_be_bound_with_different_modifiers() {
+	let text = "[bindings]\n\"test.zoom\" = [\"scroll\", \"shift+scroll\"]";
+	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
+
+	assert_eq!(keymap.axis_bindings().len(), 2);
+}
+
+#[test]
+fn rejects_the_same_axis_input_with_the_same_modifiers_twice() {
+	let error = parse_error("[bindings]\n\"test.zoom\" = [\"shift+scroll\", \"Shift+Scroll\"]");
+
+	assert!(error.contains("bound to both"), "{error}");
 }
 
 #[test]

@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use bevy::prelude::*;
 
-use crate::editor::input::state::SourceId;
+use crate::editor::input::{modifiers::Modifiers, state::SourceId};
 
 const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("a", KeyCode::KeyA),
@@ -130,9 +130,7 @@ impl ShortcutInput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shortcut {
 	input: ShortcutInput,
-	ctrl: bool,
-	shift: bool,
-	alt: bool,
+	modifiers: Modifiers,
 }
 
 impl Shortcut {
@@ -142,10 +140,7 @@ impl Shortcut {
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
 	) -> bool {
-		self.input.just_pressed(keys, mouse_buttons)
-			&& keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) == self.ctrl
-			&& keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) == self.shift
-			&& keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]) == self.alt
+		self.input.just_pressed(keys, mouse_buttons) && self.modifiers == Modifiers::from_keys(keys)
 	}
 
 	// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
@@ -169,15 +164,7 @@ impl Shortcut {
 /// Formats for display to the user, such as `Ctrl+Shift+Z`.
 impl fmt::Display for Shortcut {
 	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-		for (is_held, name) in [
-			(self.ctrl, "Ctrl"),
-			(self.shift, "Shift"),
-			(self.alt, "Alt"),
-		] {
-			if is_held {
-				write!(formatter, "{name}+")?;
-			}
-		}
+		write!(formatter, "{}", self.modifiers)?;
 
 		match self.input.name() {
 			Some(name) => {
@@ -207,29 +194,17 @@ impl FromStr for Shortcut {
 			.split('+')
 			.map(|token| token.trim().to_ascii_lowercase())
 			.collect();
+
 		let key_name = tokens.pop().unwrap_or_default();
+
+		let modifiers = tokens
+			.join("+")
+			.parse::<Modifiers>()
+			.map_err(|error| format!("{error} in \"{text}\""))?;
 		let input = ShortcutInput::from_name(&key_name)
 			.ok_or_else(|| format!("unknown key or mouse button \"{key_name}\" in \"{text}\""))?;
 
-		let mut shortcut = Self {
-			input,
-			ctrl: false,
-			shift: false,
-			alt: false,
-		};
-		for modifier in tokens {
-			let flag = match modifier.as_str() {
-				"ctrl" => &mut shortcut.ctrl,
-				"shift" => &mut shortcut.shift,
-				"alt" => &mut shortcut.alt,
-				_ => return Err(format!("unknown modifier \"{modifier}\" in \"{text}\"")),
-			};
-			if *flag {
-				return Err(format!("repeated modifier \"{modifier}\" in \"{text}\""));
-			}
-			*flag = true;
-		}
-		Ok(shortcut)
+		Ok(Shortcut { input, modifiers })
 	}
 }
 

@@ -4,7 +4,7 @@ use bevy::{asset::io::file::FileAssetReader, prelude::*};
 use serde::Deserialize;
 
 use crate::editor::input::{
-	Action, ActionState, AxisBinding, AxisInput, Scale, Shortcut, ValueKind,
+	Action, ActionState, AxisBinding, AxisInput, Scale, Shortcut, ValueKind, modifiers::Modifiers,
 };
 
 const KEYMAP_FILE: &str = "keymap.toml";
@@ -116,25 +116,27 @@ impl Keymap {
 
 			for entry in &entries {
 				let entry_text = entry.input();
-				// Axis inputs are told apart from shortcuts by their last token
-				let last_token = entry_text.rsplit('+').next().unwrap_or_default();
+				// Axis inputs are told apart from shortcuts by their last token.
+				let (modifiers_text, last_token) =
+					entry_text.rsplit_once('+').unwrap_or(("", entry_text));
 
 				if let Ok(input) = last_token.parse::<AxisInput>() {
-					if entry_text.contains('+') {
-						return Err(format!(
-							"action \"{action_name}\": modifiers on axis inputs are not supported (\"{entry_text}\")"
-						));
-					}
-
 					if actions.kind_of(action) != Some(input.value_kind()) {
 						return Err(format!(
 							"action \"{action_name}\" cannot be bound to \"{input}\": the kinds do not match"
 						));
 					}
 
-					if let Some(other) = axis_bindings.iter().find(|other| other.input == input) {
+					let modifiers: Modifiers = modifiers_text.parse().map_err(|error| {
+						format!("action \"{action_name}\": {error} in \"{entry_text}\"")
+					})?;
+
+					if let Some(other) = axis_bindings
+						.iter()
+						.find(|other| other.input == input && other.modifiers == modifiers)
+					{
 						return Err(format!(
-							"axis input \"{input}\" is bound to both {} and {action}",
+							"\"{entry_text}\" is bound to both {} and {action}",
 							other.action
 						));
 					}
@@ -148,6 +150,7 @@ impl Keymap {
 
 					axis_bindings.push(AxisBinding {
 						input,
+						modifiers,
 						scale,
 						action,
 					});

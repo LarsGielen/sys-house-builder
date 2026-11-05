@@ -7,7 +7,7 @@ use bevy::{
 };
 
 use crate::editor::input::{
-	ActionState, AxisInput, Keymap, Shortcut, signal::Signal, state::SourceId,
+	ActionState, AxisInput, Keymap, Shortcut, modifiers::Modifiers, signal::Signal, state::SourceId,
 };
 
 /// Turns keyboard and mouse button shortcuts into button contributions.
@@ -60,11 +60,16 @@ const PIXELS_PER_LINE: f32 = 40.0;
 /// Contributes the mouse motion and scroll of this frame to the actions they are bound to.
 pub fn poll_mouse_axes(
 	keymap: &Keymap,
+	keys: &ButtonInput<KeyCode>,
 	motion: &AccumulatedMouseMotion,
 	scroll: &AccumulatedMouseScroll,
 	state: &mut ActionState,
 ) {
+	let held_modifiers = Modifiers::from_keys(keys);
 	for binding in keymap.axis_bindings() {
+		if binding.modifiers != held_modifiers {
+			continue;
+		}
 		let Some(signal) = axis_signal(binding.input, motion, scroll) else {
 			continue;
 		};

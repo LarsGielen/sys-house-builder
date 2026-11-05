@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use bevy::math::Vec2;
 use serde::Deserialize;
 
-use crate::editor::input::{AxisMode, ValueKind, signal::Signal};
+use crate::editor::input::{AxisMode, ValueKind, modifiers::Modifiers, signal::Signal};
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -107,9 +107,14 @@ impl Scale {
 }
 
 /// An axis input bound to an action by name, with the scale applied to its value.
+///
+/// It only contributes while the held modifiers equal `modifiers` exactly, so `scroll` stops
+/// while Shift is held and `shift+scroll` takes over. Unlike a shortcut it is not latched: it
+/// is evaluated every frame, so pressing or releasing a modifier switches binding immediately.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AxisBinding {
 	pub input: AxisInput,
+	pub modifiers: Modifiers,
 	pub scale: Scale,
 	pub action: &'static str,
 }

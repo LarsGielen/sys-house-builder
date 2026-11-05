@@ -3,6 +3,7 @@ use bevy::{input::InputSystems, prelude::*};
 mod action;
 mod axis_input;
 mod keymap;
+mod modifiers;
 mod shortcut;
 mod signal;
 mod sources;
@@ -98,11 +99,12 @@ fn poll_buttons(
 
 fn poll_axes(
 	keymap: Res<Keymap>,
+	keys: Res<ButtonInput<KeyCode>>,
 	motion: Res<AccumulatedMouseMotion>,
 	scroll: Res<AccumulatedMouseScroll>,
 	mut state: ResMut<ActionState>,
 ) {
-	poll_mouse_axes(&keymap, &motion, &scroll, &mut state);
+	poll_mouse_axes(&keymap, &keys, &motion, &scroll, &mut state);
 }
 
 #[cfg(test)]

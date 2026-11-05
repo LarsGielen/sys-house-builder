@@ -180,3 +180,42 @@ fn a_binding_scale_is_applied_before_the_value_reaches_the_action_state() {
 	assert_eq!(state.axis2d(TestAction::Look), Vec2::new(2.0, -2.0));
 	assert_eq!(state.axis1d(TestAction::Zoom), -3.0);
 }
+
+#[test]
+fn an_axis_binding_fires_only_with_exactly_its_modifiers() {
+	let mut app = app_with_devices();
+	let text = "[bindings]\n\"test.zoom\" = [\"scroll\"]\n\"test.look\" = [\"shift+mouse_motion\"]";
+	let keymap = Keymap::parse(text, app.world().resource::<ActionState>()).unwrap();
+	app.insert_resource(keymap);
+	let scroll = Vec2::new(0.0, 2.0);
+	let motion = Vec2::new(3.0, 1.0);
+
+	// Without Shift only the plain binding fires.
+	app.world_mut()
+		.resource_mut::<AccumulatedMouseScroll>()
+		.delta = scroll;
+	app.world_mut()
+		.resource_mut::<AccumulatedMouseMotion>()
+		.delta = motion;
+	run_input_frame(&mut app);
+	let state = app.world().resource::<ActionState>();
+	assert_eq!(state.axis1d(TestAction::Zoom), 2.0);
+	assert_eq!(state.axis2d(TestAction::Look), Vec2::ZERO);
+
+	// With Shift held the plain binding stops and the Shift binding takes over.
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::ShiftRight);
+	run_input_frame(&mut app);
+	let state = app.world().resource::<ActionState>();
+	assert_eq!(state.axis1d(TestAction::Zoom), 0.0);
+	assert_eq!(state.axis2d(TestAction::Look), motion);
+
+	// Any extra modifier breaks the match.
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::ControlLeft);
+	run_input_frame(&mut app);
+	let state = app.world().resource::<ActionState>();
+	assert_eq!(state.axis2d(TestAction::Look), Vec2::ZERO);
+}

@@ -4,7 +4,7 @@ use super::*;
 fn shortcut_parsing_is_case_insensitive_and_checks_modifiers() {
 	let shortcut: Shortcut = "Ctrl+Shift+Z".parse().unwrap();
 	assert_eq!(shortcut.input, ShortcutInput::Key(KeyCode::KeyZ));
-	assert!(shortcut.ctrl && shortcut.shift && !shortcut.alt);
+	assert!(shortcut.modifiers.ctrl && shortcut.modifiers.shift && !shortcut.modifiers.alt);
 
 	assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
 	assert!("meta+z".parse::<Shortcut>().is_err());
@@ -24,7 +24,7 @@ fn displays_shortcuts_for_the_user() {
 fn parses_mouse_buttons_without_confusing_them_with_arrow_keys() {
 	let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
 	assert_eq!(shortcut.input, ShortcutInput::Mouse(MouseButton::Middle));
-	assert!(shortcut.shift);
+	assert!(shortcut.modifiers.shift);
 
 	let arrow: Shortcut = "ctrl+left".parse().unwrap();
 	assert_eq!(arrow.input, ShortcutInput::Key(KeyCode::ArrowLeft));
