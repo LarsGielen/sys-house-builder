@@ -41,8 +41,7 @@ impl fmt::Display for Modifiers {
 impl FromStr for Modifiers {
 	type Err = String;
 
-	/// Parses only the modifiers, such as `ctrl+shift`, case-insensitive. Empty text is no
-	/// modifiers, so a shortcut without any can share this parser.
+	/// Parses only the modifiers, such as `ctrl+shift`, case-insensitive.
 	fn from_str(text: &str) -> Result<Self, String> {
 		let mut modifiers = Modifiers::default();
 		if text.trim().is_empty() {
