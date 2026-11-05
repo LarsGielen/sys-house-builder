@@ -1,4 +1,4 @@
-use crate::editor_core::input::{Action, ActionGroup, AxisMode, ValueKind};
+use crate::core::input::{Action, ActionGroup, AxisMode, ValueKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CameraAction {

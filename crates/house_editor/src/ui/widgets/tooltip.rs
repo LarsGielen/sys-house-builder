@@ -1,7 +1,7 @@
 use bevy::{ecs::query::QueryData, picking::hover::Hovered, prelude::*};
 
 use crate::{
-	editor_core::input::{Keymap, UiAction},
+	core::input::{Keymap, UiAction},
 	ui::theme::{colors, editor_layout, spacing, typography},
 };
 

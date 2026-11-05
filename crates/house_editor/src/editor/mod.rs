@@ -2,11 +2,11 @@ use bevy::{camera::RenderTarget, prelude::*, render::render_resource::TextureFor
 
 use crate::{
 	app_state::AppState,
+	core::input::{ActionState, InputPlugin, Keymap},
 	editor::{
 		camera::{OrbitCamera, OrbitCameraPlugin},
 		inputs::EditorInputPlugin,
 	},
-	editor_core::input::{ActionState, InputPlugin, Keymap},
 };
 
 mod camera;

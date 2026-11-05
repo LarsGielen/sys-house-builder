@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
+	core::input::UiAction,
 	editor::inputs::EditorAction,
-	editor_core::input::UiAction,
 	ui::{
 		icons::{Icon, Icons},
 		theme::{colors, editor_layout, spacing},

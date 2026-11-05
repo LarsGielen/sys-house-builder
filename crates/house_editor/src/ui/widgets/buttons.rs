@@ -9,7 +9,7 @@ use bevy::{
 };
 
 use crate::{
-	editor_core::input::{UiAction, UiActivated},
+	core::input::{UiAction, UiActivated},
 	ui::{
 		theme::{colors, editor_layout},
 		widgets::tooltip::TooltipText,

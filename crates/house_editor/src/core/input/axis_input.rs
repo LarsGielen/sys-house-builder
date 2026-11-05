@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use bevy::math::Vec2;
 use serde::Deserialize;
 
-use crate::editor_core::input::{
+use crate::core::input::{
 	AxisMode, ShortcutInput, ValueKind, modifiers::Modifiers, signal::Signal, state::SourceId,
 };
 

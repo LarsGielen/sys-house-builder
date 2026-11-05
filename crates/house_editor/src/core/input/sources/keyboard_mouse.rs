@@ -6,7 +6,7 @@ use bevy::{
 	prelude::*,
 };
 
-use crate::editor_core::input::{
+use crate::core::input::{
 	ActionState, AxisInput, Keymap, Shortcut, ShortcutInput, modifiers::Modifiers, signal::Signal,
 };
 

@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 
 use crate::{
+	core::input::InputAppExt,
 	editor::camera::{
 		controls::{ActiveCameraDrag, update_camera_controls, update_cursor_lock},
 		input::CameraAction,
 	},
-	editor_core::input::InputAppExt,
 };
 
 mod controls;

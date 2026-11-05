@@ -1,4 +1,4 @@
-use crate::editor_core::input::signal::AxisMode;
+use crate::core::input::signal::AxisMode;
 
 use super::*;
 

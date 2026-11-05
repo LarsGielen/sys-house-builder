@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::editor_core::input::{
+use crate::core::input::{
 	action::{Action, ActionGroup},
 	signal::{Signal, ValueKind},
 };

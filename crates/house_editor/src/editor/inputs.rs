@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::editor_core::input::{Action, ActionGroup, ActionState, InputAppExt, ValueKind};
+use crate::core::input::{Action, ActionGroup, ActionState, InputAppExt, ValueKind};
 
 pub struct EditorInputPlugin;
 impl Plugin for EditorInputPlugin {

@@ -5,8 +5,8 @@ use bevy::{
 };
 
 use crate::{
+	core::input::ActionState,
 	editor::camera::{OrbitCamera, input::CameraAction},
-	editor_core::input::ActionState,
 };
 
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.01;

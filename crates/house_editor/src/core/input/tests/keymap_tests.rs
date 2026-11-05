@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor_core::input::{
+use crate::core::input::{
 	Action, ActionGroup, ShortcutInput, modifiers::Modifiers, signal::AxisMode,
 };
 
