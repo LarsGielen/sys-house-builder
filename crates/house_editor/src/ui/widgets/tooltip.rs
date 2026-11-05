@@ -1,7 +1,7 @@
 use bevy::{ecs::query::QueryData, picking::hover::Hovered, prelude::*};
 
 use crate::{
-	editor::{controls::ActionTrigger, input::Keymap},
+	editor::input::{Keymap, UiAction},
 	ui::theme::{colors, editor_layout, spacing, typography},
 };
 
@@ -21,7 +21,7 @@ impl Plugin for TooltipPlugin {
 struct Tooltip;
 
 /// Text shown when the entity is hovered. The entity also needs a `Hovered` component.
-/// If it has an `ActionTrigger`, the action's shortcut is appended.
+/// If it has a `UiAction`, the action's shortcut is appended.
 #[derive(Component, Default, Clone)]
 pub struct TooltipText(pub Option<&'static str>);
 
@@ -62,7 +62,7 @@ struct TooltipQuery {
 	entity: Entity,
 	hovered: &'static Hovered,
 	text: &'static TooltipText,
-	action_trigger: Option<&'static ActionTrigger>,
+	ui_action: Option<&'static UiAction>,
 	computed_node: &'static ComputedNode,
 	ui_transform: &'static UiGlobalTransform,
 }
@@ -102,9 +102,9 @@ fn update_tooltip(
 
 	// Looked up on every show, so the hint follows the keymap if it ever changes at runtime.
 	let shortcut = target
-		.action_trigger
-		.and_then(|trigger| trigger.0)
-		.and_then(|action| keymap.shortcuts_for(action).next());
+		.ui_action
+		.and_then(|action| action.0)
+		.and_then(|name| keymap.shortcuts_for(name).next());
 	let hint_text = match shortcut {
 		Some(shortcut) => format!("{label} ({shortcut})"),
 		None => label.to_string(),

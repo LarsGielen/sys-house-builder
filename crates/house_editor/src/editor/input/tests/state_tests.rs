@@ -46,7 +46,9 @@ fn state_with(actions: &[TestAction]) -> ActionState {
 fn frame(state: &mut ActionState, contributions: &[(SourceId, TestAction, Signal)]) {
 	state.start_frame();
 	for &(source, action, signal) in contributions {
-		state.contribute(source, action, signal).unwrap();
+		state
+			.contribute_named(source, action.name(), signal)
+			.unwrap();
 	}
 	state.resolve();
 }
@@ -59,7 +61,7 @@ fn a_held_button_is_just_pressed_only_on_the_first_frame() {
 
 	state.start_frame();
 	state
-		.contribute(keyboard, TestAction::Jump, Signal::Button(true))
+		.contribute_named(keyboard, TestAction::Jump.name(), Signal::Button(true))
 		.unwrap();
 	state.resolve();
 	assert!(state.pressed(TestAction::Jump));
@@ -67,7 +69,7 @@ fn a_held_button_is_just_pressed_only_on_the_first_frame() {
 
 	state.start_frame();
 	state
-		.contribute(keyboard, TestAction::Jump, Signal::Button(true))
+		.contribute_named(keyboard, TestAction::Jump.name(), Signal::Button(true))
 		.unwrap();
 	state.resolve();
 	assert!(state.pressed(TestAction::Jump));
@@ -154,7 +156,7 @@ fn contributing_to_an_unregistered_action_is_an_error_and_changes_nothing() {
 	let mut state = ActionState::default();
 
 	state.start_frame();
-	let result = state.contribute(SourceId::KEYBOARD, Jump, Signal::Button(true));
+	let result = state.contribute_named(SourceId::KEYBOARD, Jump.name(), Signal::Button(true));
 	state.resolve();
 
 	assert!(matches!(result, Err(ContributionError::Unregistered)));
@@ -166,9 +168,12 @@ fn contributing_the_wrong_signal_kind_is_an_error_and_changes_nothing() {
 	let mut state = state_with(&[Jump, Move]);
 
 	state.start_frame();
-	let axis_to_button = state.contribute(SourceId::KEYBOARD, Jump, Signal::Axis1D(1.0));
-	let button_to_axis = state.contribute(SourceId::KEYBOARD, Move, Signal::Button(true));
-	let wrong_dimension = state.contribute(SourceId::KEYBOARD, Move, Signal::Axis1D(1.0));
+	let axis_to_button =
+		state.contribute_named(SourceId::KEYBOARD, Jump.name(), Signal::Axis1D(1.0));
+	let button_to_axis =
+		state.contribute_named(SourceId::KEYBOARD, Move.name(), Signal::Button(true));
+	let wrong_dimension =
+		state.contribute_named(SourceId::KEYBOARD, Move.name(), Signal::Axis1D(1.0));
 	state.resolve();
 
 	assert!(matches!(axis_to_button, Err(ContributionError::WrongKind)));
@@ -184,9 +189,13 @@ fn a_rejected_contribution_does_not_affect_valid_ones_in_the_same_frame() {
 
 	state.start_frame();
 	state
-		.contribute(SourceId::KEYBOARD, Jump, Signal::Button(true))
+		.contribute_named(SourceId::KEYBOARD, Jump.name(), Signal::Button(true))
 		.unwrap();
-	assert!(state.contribute(UI, Jump, Signal::Axis1D(1.0)).is_err());
+	assert!(
+		state
+			.contribute_named(UI, Jump.name(), Signal::Axis1D(1.0))
+			.is_err()
+	);
 	state.resolve();
 
 	assert!(state.pressed(Jump));

@@ -9,7 +9,7 @@ use bevy::{
 };
 
 use crate::{
-	editor::controls::ActionTrigger,
+	editor::input::{UiAction, UiActivated},
 	ui::{
 		theme::{colors, editor_layout},
 		widgets::tooltip::TooltipText,
@@ -45,8 +45,8 @@ pub struct ButtonOptions {
 	pub color: Option<Color>,
 }
 
-pub fn button(action: impl Into<ActionTrigger>, options: ButtonOptions) -> impl Scene {
-	let action: ActionTrigger = action.into();
+pub fn button(action: impl Into<UiAction>, options: ButtonOptions) -> impl Scene {
+	let action = action.into();
 	let style = options.style.unwrap_or_default();
 	let hint = options.hint;
 	bsn! {
@@ -70,7 +70,7 @@ pub fn button(action: impl Into<ActionTrigger>, options: ButtonOptions) -> impl 
 }
 
 pub fn icon_button(
-	action: impl Into<ActionTrigger>,
+	action: impl Into<UiAction>,
 	icon: Handle<Image>,
 	size: f32,
 	options: ButtonOptions,
@@ -87,16 +87,14 @@ pub fn icon_button(
 
 pub fn run_action_on_activate(
 	activate: On<Activate>,
-	triggers: Query<&ActionTrigger>,
+	actions: Query<&UiAction>,
 	mut commands: Commands,
 ) {
-	let Ok(trigger) = triggers.get(activate.entity) else {
+	let Ok(UiAction(Some(name))) = actions.get(activate.entity) else {
 		return;
 	};
 
-	if let Some(action) = trigger.0 {
-		action.trigger(&mut commands);
-	}
+	commands.trigger(UiActivated::button(name));
 }
 
 #[derive(QueryData)]

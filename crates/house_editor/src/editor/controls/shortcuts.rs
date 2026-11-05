@@ -8,7 +8,7 @@ use crate::editor::{
 // Embedded so there is always a valid keymap to fall back to, without duplicating the bindings in code.
 pub(super) const BUILT_IN_KEYMAP: &str = include_str!("../../../assets/keymap.toml");
 
-pub(super) fn trigger_shortcuts(state: Res<ActionState>, mut commands: Commands) {
+pub(super) fn trigger_editor_actions(state: Res<ActionState>, mut commands: Commands) {
 	for &action in EditorAction::all() {
 		if state.just_pressed(action) {
 			commands.trigger(action);

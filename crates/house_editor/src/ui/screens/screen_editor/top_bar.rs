@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-	editor::controls::{ActionTrigger, EditorAction},
+	editor::{controls::EditorAction, input::UiAction},
 	ui::{
 		icons::{Icon, Icons},
 		theme::{colors, editor_layout, spacing},
@@ -23,7 +23,7 @@ pub(super) fn top_bar(icons: &Icons) -> impl Scene + use<> {
 		BackgroundColor(colors::SURFACE)
 		BorderColor::all(colors::BORDER)
 		Children [
-			@icon_button(ActionTrigger(None), icons.get(Icon::House), size, ButtonOptions { ..default() })
+			@icon_button(UiAction::default(), icons.get(Icon::House), size, ButtonOptions { ..default() })
 			--
 			@separator_vertical()
 			--

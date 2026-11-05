@@ -73,7 +73,7 @@ const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum ShortcutInput {
+pub enum ShortcutInput {
 	Key(KeyCode),
 	Mouse(MouseButton),
 }

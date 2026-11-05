@@ -5,7 +5,7 @@ mod action_handler;
 mod camera_controls;
 mod shortcuts;
 
-pub use action_definitions::{ActionTrigger, CameraAction, EditorAction};
+pub use action_definitions::{CameraAction, EditorAction};
 
 use crate::editor::input::{ActionState, InputAppExt, Keymap};
 
@@ -31,7 +31,7 @@ impl Plugin for ControlsPlugin {
 		app.add_systems(
 			Update,
 			(
-				shortcuts::trigger_shortcuts,
+				shortcuts::trigger_editor_actions,
 				camera_controls::update_camera_controls,
 				camera_controls::update_cursor_lock
 					.after(camera_controls::update_camera_controls)

@@ -59,8 +59,8 @@ fn finds_all_shortcuts_of_an_action() {
 		"[bindings]\n\"test.undo\" = [\"ctrl+z\"]\n\"test.redo\" = [\"ctrl+shift+z\", \"ctrl+y\"]";
 	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
 
-	assert_eq!(keymap.shortcuts_for(TestAction::Redo).count(), 2);
-	assert_eq!(keymap.shortcuts_for(TestAction::Undo).count(), 1);
+	assert_eq!(keymap.shortcuts_for(TestAction::Redo.name()).count(), 2);
+	assert_eq!(keymap.shortcuts_for(TestAction::Undo.name()).count(), 1);
 	assert_eq!(keymap.button_bindings().len(), 3);
 }
 
@@ -69,7 +69,7 @@ fn an_action_without_bindings_has_no_shortcuts() {
 	let text = "[bindings]\n\"test.undo\" = [\"ctrl+z\"]";
 	let keymap = Keymap::parse(text, &registered_actions()).unwrap();
 
-	assert_eq!(keymap.shortcuts_for(TestAction::Redo).count(), 0);
+	assert_eq!(keymap.shortcuts_for(TestAction::Redo.name()).count(), 0);
 }
 
 #[test]

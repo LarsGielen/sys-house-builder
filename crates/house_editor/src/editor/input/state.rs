@@ -4,18 +4,16 @@ use bevy::prelude::*;
 
 use crate::editor::input::{
 	action::{Action, ActionGroup},
-	signal::{
-		Signal,
-		ValueKind::{self},
-	},
+	signal::{Signal, ValueKind},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(u32);
 
 impl SourceId {
-	pub const KEYBOARD: SourceId = Self(0);
-	pub const MOUSE: Self = Self(1);
+	pub const KEYBOARD: SourceId = SourceId(0);
+	pub const MOUSE: SourceId = SourceId(1);
+	pub const UI: SourceId = SourceId(2);
 }
 
 struct ActionSlot {
@@ -71,15 +69,6 @@ impl ActionState {
 			slot.signal_previous = slot.signal;
 			slot.contributions.clear();
 		}
-	}
-
-	pub fn contribute(
-		&mut self,
-		source: SourceId,
-		action: impl Action,
-		signal: Signal,
-	) -> Result<(), ContributionError> {
-		self.contribute_named(source, action.name(), signal)
 	}
 
 	pub fn contribute_named(

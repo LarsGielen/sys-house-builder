@@ -180,8 +180,7 @@ impl Keymap {
 		&self.axis_bindings
 	}
 
-	pub fn shortcuts_for(&self, action: impl Action) -> impl Iterator<Item = &Shortcut> {
-		let name = action.name();
+	pub fn shortcuts_for(&self, name: &'static str) -> impl Iterator<Item = &Shortcut> {
 		self.button_bindings
 			.iter()
 			.filter(move |(_, bound_name)| *bound_name == name)
