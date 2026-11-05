@@ -14,3 +14,10 @@
 # must match exactly, so "scroll" stops while Shift is held and "shift+scroll" can take over.
 "camera.look" = ["mouse_motion", "shift+mouse_motion"]
 "camera.zoom" = ["scroll"]
+
+# Held directions. A composite turns four buttons (1d: two) into one axis; the buttons can be keys
+# or mouse buttons. A button, with its modifiers, can belong to one binding only.
+"camera.move" = [
+	{ composite = "2d", up = "w", down = "s", left = "a", right = "d" },
+	{ composite = "2d", up = "up", down = "down", left = "left", right = "right" },
+]

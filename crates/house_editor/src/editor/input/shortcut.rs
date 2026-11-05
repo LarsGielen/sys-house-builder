@@ -73,13 +73,13 @@ const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ShortcutInput {
+pub(crate) enum ShortcutInput {
 	Key(KeyCode),
 	Mouse(MouseButton),
 }
 
 impl ShortcutInput {
-	fn from_name(name: &str) -> Option<Self> {
+	pub(crate) fn from_name(name: &str) -> Option<Self> {
 		let key = KEY_NAMES.iter().find(|(key_name, _)| *key_name == name);
 		let button = MOUSE_BUTTON_NAMES
 			.iter()
@@ -91,7 +91,7 @@ impl ShortcutInput {
 		}
 	}
 
-	fn name(&self) -> Option<&'static str> {
+	pub(crate) fn name(&self) -> Option<&'static str> {
 		match self {
 			Self::Key(key) => KEY_NAMES
 				.iter()
@@ -115,7 +115,14 @@ impl ShortcutInput {
 		}
 	}
 
-	fn pressed(
+	pub(crate) fn source(&self) -> SourceId {
+		match self {
+			Self::Key(_) => SourceId::KEYBOARD,
+			Self::Mouse(_) => SourceId::MOUSE,
+		}
+	}
+
+	pub(crate) fn pressed(
 		&self,
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
@@ -134,6 +141,10 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
+	pub(crate) fn new(input: ShortcutInput, modifiers: Modifiers) -> Self {
+		Self { input, modifiers }
+	}
+
 	// Modifiers must match exactly so that Ctrl+Shift+Z does not also fire the Ctrl+Z binding.
 	pub(crate) fn just_pressed(
 		&self,
@@ -154,10 +165,7 @@ impl Shortcut {
 	}
 
 	pub(crate) fn source(&self) -> SourceId {
-		match self.input {
-			ShortcutInput::Key(_) => SourceId::KEYBOARD,
-			ShortcutInput::Mouse(_) => SourceId::MOUSE,
-		}
+		self.input.source()
 	}
 }
 

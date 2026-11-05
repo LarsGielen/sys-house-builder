@@ -98,6 +98,7 @@ pub enum CameraAction {
 	Pan,
 	Look,
 	Zoom,
+	Move,
 }
 
 impl Action for CameraAction {
@@ -108,6 +109,7 @@ impl Action for CameraAction {
 			CameraAction::Pan => "camera.pan",
 			CameraAction::Look => "camera.look",
 			CameraAction::Zoom => "camera.zoom",
+			CameraAction::Move => "camera.move",
 		}
 	}
 
@@ -117,12 +119,13 @@ impl Action for CameraAction {
 			CameraAction::Pan => ValueKind::Button,
 			CameraAction::Look => ValueKind::Axis2D(AxisMode::Relative),
 			CameraAction::Zoom => ValueKind::Axis1D(AxisMode::Relative),
+			CameraAction::Move => ValueKind::Axis2D(AxisMode::Absolute),
 		}
 	}
 }
 
 impl ActionGroup for CameraAction {
 	fn all() -> &'static [Self] {
-		&[Self::Orbit, Self::Pan, Self::Look, Self::Zoom]
+		&[Self::Orbit, Self::Pan, Self::Look, Self::Zoom, Self::Move]
 	}
 }

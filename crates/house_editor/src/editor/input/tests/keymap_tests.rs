@@ -1,5 +1,5 @@
 use super::*;
-use crate::editor::input::{ActionGroup, modifiers::Modifiers, signal::AxisMode};
+use crate::editor::input::{ActionGroup, ShortcutInput, modifiers::Modifiers, signal::AxisMode};
 
 #[derive(Clone, Copy)]
 enum TestAction {
@@ -7,6 +7,8 @@ enum TestAction {
 	Redo,
 	Look,
 	Zoom,
+	Move,
+	Rise,
 }
 
 impl Action for TestAction {
@@ -16,6 +18,8 @@ impl Action for TestAction {
 			Self::Redo => "test.redo",
 			Self::Look => "test.look",
 			Self::Zoom => "test.zoom",
+			Self::Move => "test.move",
+			Self::Rise => "test.rise",
 		}
 	}
 
@@ -23,6 +27,8 @@ impl Action for TestAction {
 		match self {
 			Self::Look => ValueKind::Axis2D(AxisMode::Relative),
 			Self::Zoom => ValueKind::Axis1D(AxisMode::Relative),
+			Self::Move => ValueKind::Axis2D(AxisMode::Absolute),
+			Self::Rise => ValueKind::Axis1D(AxisMode::Absolute),
 			_ => ValueKind::Button,
 		}
 	}
@@ -30,7 +36,14 @@ impl Action for TestAction {
 
 impl ActionGroup for TestAction {
 	fn all() -> &'static [Self] {
-		&[Self::Undo, Self::Redo, Self::Look, Self::Zoom]
+		&[
+			Self::Undo,
+			Self::Redo,
+			Self::Look,
+			Self::Zoom,
+			Self::Move,
+			Self::Rise,
+		]
 	}
 }
 
@@ -271,4 +284,167 @@ fn reports_the_actions_a_keymap_leaves_unbound_compared_to_the_defaults() {
 		["test.look", "test.redo"]
 	);
 	assert!(defaults.actions_unbound_compared_to(&defaults).is_empty());
+}
+
+const WASD: &str = r#"{ composite = "2d", up = "w", down = "s", left = "a", right = "d" }"#;
+
+fn bindings(lines: &[&str]) -> String {
+	format!("[bindings]\n{}", lines.join("\n"))
+}
+
+#[test]
+fn parses_composites_of_both_shapes_with_modifiers_and_scale() {
+	let text = bindings(&[
+		&format!(
+			"\"test.move\" = [{WASD}, {{ composite = \"2d\", up = \"UP\", down = \"down\", left = \"left\", right = \"right\", modifiers = [\"shift\"], scale = [2.0, 2.0] }}]"
+		),
+		r#""test.rise" = [{ composite = "1d", up = "mouse_left", down = "space" }]"#,
+	]);
+	let keymap = Keymap::parse(&text, &registered_actions()).unwrap();
+
+	let bindings = keymap.axis_bindings();
+	assert_eq!(bindings.len(), 3);
+	assert_eq!(bindings[0].modifiers, Modifiers::default());
+	assert_eq!(bindings[0].scale, Scale::Two([1.0, 1.0]));
+	assert_eq!(bindings[1].modifiers, "shift".parse().unwrap());
+	assert_eq!(bindings[1].scale, Scale::Two([2.0, 2.0]));
+	assert_eq!(
+		bindings[2].input,
+		AxisInput::composite_1d(
+			ShortcutInput::Mouse(MouseButton::Left),
+			ShortcutInput::Key(KeyCode::Space)
+		)
+		.unwrap()
+	);
+}
+
+#[test]
+fn a_composite_must_match_the_kind_of_its_action() {
+	let two_d_on_1d = parse_error(&bindings(&[&format!("\"test.rise\" = [{WASD}]")]));
+	assert!(two_d_on_1d.contains("test.rise"), "{two_d_on_1d}");
+
+	let one_d_on_2d = parse_error(&bindings(&[
+		r#""test.move" = [{ composite = "1d", up = "w", down = "s" }]"#,
+	]));
+	assert!(one_d_on_2d.contains("test.move"), "{one_d_on_2d}");
+
+	// Composites are held states, so a relative axis such as looking cannot take one.
+	let on_relative = parse_error(&bindings(&[&format!("\"test.look\" = [{WASD}]")]));
+	assert!(on_relative.contains("test.look"), "{on_relative}");
+
+	let on_button = parse_error(&bindings(&[&format!("\"test.undo\" = [{WASD}]")]));
+	assert!(on_button.contains("test.undo"), "{on_button}");
+}
+
+#[test]
+fn rejects_malformed_composite_tables_with_a_message_that_names_the_problem() {
+	let cases = [
+		(r#"{ input = "scroll", composite = "1d" }"#, "not both"),
+		(r#"{ scale = 2.0 }"#, "needs `input` or `composite`"),
+		(
+			r#"{ composite = "3d", up = "w", down = "s" }"#,
+			"unknown composite",
+		),
+		(
+			r#"{ composite = "2d", up = "w", down = "s", left = "a" }"#,
+			"missing `right`",
+		),
+		(r#"{ composite = "1d", up = "w" }"#, "missing `down`"),
+		(
+			r#"{ composite = "1d", up = "w", down = "s", left = "a" }"#,
+			"does not take `left`",
+		),
+		(
+			r#"{ input = "scroll", up = "w" }"#,
+			"only go with `composite`",
+		),
+		(
+			r#"{ input = "scroll", modifiers = ["shift"] }"#,
+			"only goes with `composite`",
+		),
+		(
+			r#"{ composite = "1d", up = "w", down = "plus" }"#,
+			"unknown key",
+		),
+		(
+			r#"{ composite = "1d", up = "w", down = "W" }"#,
+			"two directions",
+		),
+		(
+			r#"{ composite = "1d", up = "w", down = "s", modifiers = ["meta"] }"#,
+			"meta",
+		),
+	];
+
+	for (entry, expected) in cases {
+		let text = bindings(&[&format!("\"test.rise\" = [{entry}]")]);
+		let error = parse_error(&text);
+		assert!(error.contains(expected), "{entry}: {error}");
+	}
+}
+
+#[test]
+fn a_composite_scale_must_fit_the_shape() {
+	let number_on_2d = bindings(&[
+		r#""test.move" = [{ composite = "2d", up = "w", down = "s", left = "a", right = "d", scale = 2.0 }]"#,
+	]);
+	assert!(Keymap::parse(&number_on_2d, &registered_actions()).is_err());
+
+	let pair_on_1d = bindings(&[
+		r#""test.rise" = [{ composite = "1d", up = "w", down = "s", scale = [1.0, 1.0] }]"#,
+	]);
+	assert!(Keymap::parse(&pair_on_1d, &registered_actions()).is_err());
+}
+
+#[test]
+fn a_direction_cannot_also_be_a_shortcut_with_the_same_modifiers() {
+	let plain = bindings(&[
+		&format!("\"test.move\" = [{WASD}]"),
+		r#""test.undo" = ["s"]"#,
+	]);
+	let error = parse_error(&plain);
+	assert!(
+		error.contains("test.undo") && error.contains("test.move"),
+		"{error}"
+	);
+
+	// Ctrl+S is a different button state than S, so both can exist.
+	let with_ctrl = bindings(&[
+		&format!("\"test.move\" = [{WASD}]"),
+		r#""test.undo" = ["ctrl+s"]"#,
+	]);
+	assert!(Keymap::parse(&with_ctrl, &registered_actions()).is_ok());
+}
+
+#[test]
+fn a_mouse_button_direction_conflicts_with_the_same_mouse_shortcut() {
+	let text = bindings(&[
+		r#""test.rise" = [{ composite = "1d", up = "mouse_left", down = "space" }]"#,
+		r#""test.undo" = ["mouse_left"]"#,
+	]);
+
+	assert!(Keymap::parse(&text, &registered_actions()).is_err());
+}
+
+#[test]
+fn two_composites_cannot_share_a_direction_unless_their_modifiers_differ() {
+	let shared = bindings(&[
+		&format!("\"test.move\" = [{WASD}]"),
+		r#""test.rise" = [{ composite = "1d", up = "w", down = "c" }]"#,
+	]);
+	let error = parse_error(&shared);
+	assert!(error.contains("both"), "{error}");
+
+	let modified = bindings(&[
+		&format!("\"test.move\" = [{WASD}]"),
+		r#""test.rise" = [{ composite = "1d", up = "w", down = "c", modifiers = ["shift"] }]"#,
+	]);
+	assert!(Keymap::parse(&modified, &registered_actions()).is_ok());
+}
+
+#[test]
+fn the_same_composite_cannot_be_bound_twice() {
+	let text = bindings(&[&format!("\"test.move\" = [{WASD}, {WASD}]")]);
+
+	assert!(parse_error(&text).contains("bound to both"));
 }

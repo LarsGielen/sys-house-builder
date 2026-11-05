@@ -13,11 +13,12 @@ pub use action::{Action, ActionGroup};
 pub use axis_input::{AxisBinding, AxisInput, Scale};
 pub use keymap::Keymap;
 pub use shortcut::Shortcut;
+pub(crate) use shortcut::ShortcutInput;
 pub use signal::{AxisMode, ValueKind};
 pub use state::ActionState;
 
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
-use sources::{ButtonSource, poll_mouse_axes};
+use sources::{ButtonSource, poll_axis_bindings};
 
 /// The phases of one input frame, in order. Source systems belong in `Sources`; consumers
 /// read the resolved state in `Update` or later, so they never see a half-built frame.
@@ -100,11 +101,12 @@ fn poll_buttons(
 fn poll_axes(
 	keymap: Res<Keymap>,
 	keys: Res<ButtonInput<KeyCode>>,
+	mouse_buttons: Res<ButtonInput<MouseButton>>,
 	motion: Res<AccumulatedMouseMotion>,
 	scroll: Res<AccumulatedMouseScroll>,
 	mut state: ResMut<ActionState>,
 ) {
-	poll_mouse_axes(&keymap, &keys, &motion, &scroll, &mut state);
+	poll_axis_bindings(&keymap, &keys, &mouse_buttons, &motion, &scroll, &mut state);
 }
 
 #[cfg(test)]

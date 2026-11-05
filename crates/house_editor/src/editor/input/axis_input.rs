@@ -3,23 +3,64 @@ use std::{fmt, str::FromStr};
 use bevy::math::Vec2;
 use serde::Deserialize;
 
-use crate::editor::input::{AxisMode, ValueKind, modifiers::Modifiers, signal::Signal};
+use crate::editor::input::{
+	AxisMode, ShortcutInput, ValueKind, modifiers::Modifiers, signal::Signal, state::SourceId,
+};
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.
+///
+/// The mouse inputs are relative: they report what changed this frame. A composite turns buttons
+/// into an absolute axis: it reports which directions are held right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AxisInput {
 	MouseMotion,
 	Scroll,
+	Composite1D {
+		up: ShortcutInput,
+		down: ShortcutInput,
+	},
+	Composite2D {
+		up: ShortcutInput,
+		down: ShortcutInput,
+		left: ShortcutInput,
+		right: ShortcutInput,
+	},
 }
 
 impl AxisInput {
-	const ALL: [Self; 2] = [Self::MouseMotion, Self::Scroll];
+	const NAMED: [Self; 2] = [Self::MouseMotion, Self::Scroll];
 
-	// Stored in the keymap file, so they must stay stable even if a variant is renamed.
-	pub fn name(self) -> &'static str {
+	/// Fails when two directions are the same input, since they would cancel each other.
+	pub fn composite_1d(up: ShortcutInput, down: ShortcutInput) -> Result<Self, String> {
+		let composite = Self::Composite1D { up, down };
+		composite.check_distinct_directions()?;
+		Ok(composite)
+	}
+
+	/// Fails when two directions are the same input, since they would cancel each other.
+	pub fn composite_2d(
+		up: ShortcutInput,
+		down: ShortcutInput,
+		left: ShortcutInput,
+		right: ShortcutInput,
+	) -> Result<Self, String> {
+		let composite = Self::Composite2D {
+			up,
+			down,
+			left,
+			right,
+		};
+		composite.check_distinct_directions()?;
+		Ok(composite)
+	}
+
+	/// The name stored in the keymap file. Composites have none: they are written as a table.
+	// Stable, even if a variant is renamed.
+	pub fn name(self) -> Option<&'static str> {
 		match self {
-			Self::MouseMotion => "mouse_motion",
-			Self::Scroll => "scroll",
+			Self::MouseMotion => Some("mouse_motion"),
+			Self::Scroll => Some("scroll"),
+			Self::Composite1D { .. } | Self::Composite2D { .. } => None,
 		}
 	}
 
@@ -29,26 +70,93 @@ impl AxisInput {
 		match self {
 			Self::MouseMotion => ValueKind::Axis2D(AxisMode::Relative),
 			Self::Scroll => ValueKind::Axis1D(AxisMode::Relative),
+			Self::Composite1D { .. } => ValueKind::Axis1D(AxisMode::Absolute),
+			Self::Composite2D { .. } => ValueKind::Axis2D(AxisMode::Absolute),
 		}
+	}
+
+	/// The buttons a composite reads, empty for the other inputs.
+	pub fn directions(self) -> Vec<ShortcutInput> {
+		match self {
+			Self::MouseMotion | Self::Scroll => Vec::new(),
+			Self::Composite1D { up, down } => vec![up, down],
+			Self::Composite2D {
+				up,
+				down,
+				left,
+				right,
+			} => vec![up, down, left, right],
+		}
+	}
+
+	/// The source that arbitrates this input. A composite of only mouse buttons is a mouse input,
+	/// any other composite is a keyboard input.
+	pub fn source(self) -> SourceId {
+		match self {
+			Self::MouseMotion | Self::Scroll => SourceId::MOUSE,
+			Self::Composite1D { .. } | Self::Composite2D { .. } => {
+				let all_mouse = self
+					.directions()
+					.iter()
+					.all(|direction| direction.source() == SourceId::MOUSE);
+				if all_mouse {
+					SourceId::MOUSE
+				} else {
+					SourceId::KEYBOARD
+				}
+			}
+		}
+	}
+
+	fn check_distinct_directions(self) -> Result<(), String> {
+		let directions = self.directions();
+		for (index, direction) in directions.iter().enumerate() {
+			if directions[..index].contains(direction) {
+				return Err(format!(
+					"\"{}\" is used for two directions of the same composite",
+					direction.name().unwrap_or("?")
+				));
+			}
+		}
+		Ok(())
 	}
 }
 
 impl FromStr for AxisInput {
 	type Err = String;
 
-	/// Parses the name of an axis input, case-insensitive.
+	/// Parses the name of a mouse axis input, case-insensitive. Composites are not named.
 	fn from_str(text: &str) -> Result<Self, String> {
 		let name = text.trim().to_ascii_lowercase();
-		Self::ALL
+		Self::NAMED
 			.into_iter()
-			.find(|input| input.name() == name)
+			.find(|input| input.name() == Some(name.as_str()))
 			.ok_or_else(|| format!("unknown axis input \"{text}\""))
 	}
 }
 
 impl fmt::Display for AxisInput {
 	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-		formatter.write_str(self.name())
+		if let Some(name) = self.name() {
+			return formatter.write_str(name);
+		}
+
+		const LABELS: [&str; 4] = ["up", "down", "left", "right"];
+		let directions = self.directions();
+		let kind = if directions.len() == 2 { "1d" } else { "2d" };
+		write!(formatter, "composite {kind} (")?;
+		for (index, direction) in directions.iter().enumerate() {
+			if index > 0 {
+				write!(formatter, ", ")?;
+			}
+			write!(
+				formatter,
+				"{}={}",
+				LABELS[index],
+				direction.name().unwrap_or("?")
+			)?;
+		}
+		write!(formatter, ")")
 	}
 }
 

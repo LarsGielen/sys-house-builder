@@ -227,3 +227,104 @@ fn horizontal_scroll_alone_contributes_nothing() {
 		None
 	);
 }
+
+fn composite_2d() -> AxisInput {
+	AxisInput::composite_2d(
+		ShortcutInput::Key(KeyCode::KeyW),
+		ShortcutInput::Key(KeyCode::KeyS),
+		ShortcutInput::Key(KeyCode::KeyA),
+		ShortcutInput::Key(KeyCode::KeyD),
+	)
+	.unwrap()
+}
+
+fn composite_1d() -> AxisInput {
+	AxisInput::composite_1d(
+		ShortcutInput::Mouse(MouseButton::Left),
+		ShortcutInput::Key(KeyCode::KeyC),
+	)
+	.unwrap()
+}
+
+fn composite_with(input: AxisInput, keys: &[KeyCode], buttons: &[MouseButton]) -> Option<Signal> {
+	let mut key_input = ButtonInput::<KeyCode>::default();
+	let mut mouse_input = ButtonInput::<MouseButton>::default();
+	keys.iter().for_each(|&key| key_input.press(key));
+	buttons.iter().for_each(|&button| mouse_input.press(button));
+	composite_signal(input, &key_input, &mouse_input)
+}
+
+#[test]
+fn a_held_direction_gives_a_unit_vector() {
+	assert_eq!(
+		composite_with(composite_2d(), &[KeyCode::KeyW], &[]),
+		Some(Signal::Axis2D(Vec2::new(0.0, 1.0)))
+	);
+	assert_eq!(
+		composite_with(composite_2d(), &[KeyCode::KeyA], &[]),
+		Some(Signal::Axis2D(Vec2::new(-1.0, 0.0)))
+	);
+}
+
+#[test]
+fn diagonals_are_not_faster_than_straight_lines() {
+	let Some(Signal::Axis2D(value)) =
+		composite_with(composite_2d(), &[KeyCode::KeyW, KeyCode::KeyD], &[])
+	else {
+		panic!("a diagonal must give a 2D signal");
+	};
+
+	assert!((value.length() - 1.0).abs() < 1e-6);
+	assert!(value.x > 0.0 && value.y > 0.0);
+}
+
+#[test]
+fn opposite_directions_cancel_out() {
+	assert_eq!(
+		composite_with(composite_2d(), &[KeyCode::KeyW, KeyCode::KeyS], &[]),
+		None
+	);
+	// One axis can cancel while the other still moves.
+	assert_eq!(
+		composite_with(
+			composite_2d(),
+			&[KeyCode::KeyW, KeyCode::KeyS, KeyCode::KeyD],
+			&[]
+		),
+		Some(Signal::Axis2D(Vec2::new(1.0, 0.0)))
+	);
+}
+
+#[test]
+fn an_idle_composite_contributes_nothing() {
+	assert_eq!(composite_with(composite_2d(), &[], &[]), None);
+	assert_eq!(composite_with(composite_1d(), &[], &[]), None);
+}
+
+#[test]
+fn a_1d_composite_reads_keys_and_mouse_buttons() {
+	assert_eq!(
+		composite_with(composite_1d(), &[], &[MouseButton::Left]),
+		Some(Signal::Axis1D(1.0))
+	);
+	assert_eq!(
+		composite_with(composite_1d(), &[KeyCode::KeyC], &[]),
+		Some(Signal::Axis1D(-1.0))
+	);
+	assert_eq!(
+		composite_with(composite_1d(), &[KeyCode::KeyC], &[MouseButton::Left]),
+		None
+	);
+}
+
+#[test]
+fn the_mouse_signals_ignore_composites_and_the_other_way_round() {
+	assert_eq!(
+		axis_signal(composite_2d(), &motion(Vec2::ONE), &idle_scroll()),
+		None
+	);
+	assert_eq!(
+		composite_with(AxisInput::MouseMotion, &[KeyCode::KeyW], &[]),
+		None
+	);
+}

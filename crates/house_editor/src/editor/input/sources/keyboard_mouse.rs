@@ -7,7 +7,7 @@ use bevy::{
 };
 
 use crate::editor::input::{
-	ActionState, AxisInput, Keymap, Shortcut, modifiers::Modifiers, signal::Signal, state::SourceId,
+	ActionState, AxisInput, Keymap, Shortcut, ShortcutInput, modifiers::Modifiers, signal::Signal,
 };
 
 /// Turns keyboard and mouse button shortcuts into button contributions.
@@ -57,10 +57,12 @@ impl ButtonSource {
 /// scroll is converted to lines to give actions one unit regardless of the device.
 const PIXELS_PER_LINE: f32 = 40.0;
 
-/// Contributes the mouse motion and scroll of this frame to the actions they are bound to.
-pub fn poll_mouse_axes(
+/// Contributes every axis binding that has a value this frame: the mouse motion and scroll, and
+/// the buttons held for composites.
+pub fn poll_axis_bindings(
 	keymap: &Keymap,
 	keys: &ButtonInput<KeyCode>,
+	mouse_buttons: &ButtonInput<MouseButton>,
 	motion: &AccumulatedMouseMotion,
 	scroll: &AccumulatedMouseScroll,
 	state: &mut ActionState,
@@ -70,7 +72,9 @@ pub fn poll_mouse_axes(
 		if binding.modifiers != held_modifiers {
 			continue;
 		}
-		let Some(signal) = axis_signal(binding.input, motion, scroll) else {
+		let Some(signal) = axis_signal(binding.input, motion, scroll)
+			.or_else(|| composite_signal(binding.input, keys, mouse_buttons))
+		else {
 			continue;
 		};
 
@@ -79,7 +83,7 @@ pub fn poll_mouse_axes(
 
 		// The keymap only binds registered actions of the matching kind, so this is a bug if it
 		// ever fails. Warn once instead of every frame.
-		if let Err(error) = state.contribute_named(SourceId::MOUSE, action_name, signal) {
+		if let Err(error) = state.contribute_named(binding.input.source(), action_name, signal) {
 			warn_once!("cannot contribute to \"{action_name}\": {error:?}");
 		}
 	}
@@ -104,6 +108,42 @@ fn axis_signal(
 			};
 			(lines != 0.0).then_some(Signal::Axis1D(lines))
 		}
+
+		// Read from the buttons, see `composite_signal`.
+		AxisInput::Composite1D { .. } | AxisInput::Composite2D { .. } => None,
+	}
+}
+
+/// The signal of a composite from the directions held right now, or `None` when nothing is held
+/// or opposite directions cancel out. Diagonals are normalised so that they are not faster.
+fn composite_signal(
+	input: AxisInput,
+	keys: &ButtonInput<KeyCode>,
+	mouse_buttons: &ButtonInput<MouseButton>,
+) -> Option<Signal> {
+	let held = |direction: ShortcutInput| {
+		if direction.pressed(keys, mouse_buttons) {
+			1.0
+		} else {
+			0.0
+		}
+	};
+
+	match input {
+		AxisInput::Composite1D { up, down } => {
+			let value = held(up) - held(down);
+			(value != 0.0).then_some(Signal::Axis1D(value))
+		}
+		AxisInput::Composite2D {
+			up,
+			down,
+			left,
+			right,
+		} => {
+			let value = Vec2::new(held(right) - held(left), held(up) - held(down));
+			(value != Vec2::ZERO).then(|| Signal::Axis2D(value.normalize()))
+		}
+		AxisInput::MouseMotion | AxisInput::Scroll => None,
 	}
 }
 
