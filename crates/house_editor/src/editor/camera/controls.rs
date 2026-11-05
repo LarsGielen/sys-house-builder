@@ -12,6 +12,7 @@ use crate::{
 const ORBIT_RADIANS_PER_PIXEL: f32 = 0.01;
 const PAN_PER_PIXEL: f32 = 0.0011;
 const ZOOM_PER_SCROLL_LINE: f32 = 0.1;
+const MOVE_DISTANCES_PER_SECOND: f32 = 0.5;
 
 /// A drag stays tied to the camera it started on, even if the cursor leaves the viewport.
 #[derive(Clone, Copy)]
@@ -25,6 +26,7 @@ struct CameraDrag {
 pub(super) struct ActiveCameraDrag(Option<CameraDrag>);
 
 pub fn update_camera_controls(
+	time: Res<Time>,
 	state: Res<ActionState>,
 	viewports: Query<(&ViewportNode, &Hovered)>,
 	mut cameras: Query<&mut OrbitCamera>,
@@ -74,6 +76,16 @@ pub fn update_camera_controls(
 				CameraAction::Look | CameraAction::Zoom | CameraAction::Move => {}
 			}
 		}
+	}
+
+	// Move is an absolute axis, so it is scaled by the frame time to get a speed independent of the frame rate.
+	let movement = state.axis2d(CameraAction::Move);
+	if let Some(camera_entity) = hovered_camera
+		&& movement != Vec2::ZERO
+		&& let Ok(mut camera) = cameras.get_mut(camera_entity)
+	{
+		let step = movement * MOVE_DISTANCES_PER_SECOND * time.delta_secs();
+		camera.pan(step.x, step.y);
 	}
 
 	let zoom = state.axis1d(CameraAction::Zoom);
