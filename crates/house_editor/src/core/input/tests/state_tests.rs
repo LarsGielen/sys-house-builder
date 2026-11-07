@@ -8,6 +8,7 @@ enum TestAction {
 	Move,
 	Zoom,
 	Look,
+	Rise,
 }
 
 impl Action for TestAction {
@@ -17,6 +18,7 @@ impl Action for TestAction {
 			TestAction::Move => "test.move",
 			TestAction::Zoom => "test.zoom",
 			TestAction::Look => "test.look",
+			TestAction::Rise => "test.rise",
 		}
 	}
 	fn value(self) -> ValueKind {
@@ -25,11 +27,12 @@ impl Action for TestAction {
 			TestAction::Move => ValueKind::Axis2D(AxisMode::Absolute),
 			TestAction::Zoom => ValueKind::Axis1D(AxisMode::Relative),
 			TestAction::Look => ValueKind::Axis2D(AxisMode::Relative),
+			TestAction::Rise => ValueKind::Axis1D(AxisMode::Absolute),
 		}
 	}
 }
 
-use TestAction::{Jump, Look, Move, Zoom};
+use TestAction::{Jump, Look, Move, Rise, Zoom};
 
 const CONTROLLER: SourceId = SourceId(3);
 const UI: SourceId = SourceId(4);
@@ -435,4 +438,84 @@ fn registering_an_action_again_resets_its_slot() {
 	);
 	state.register(Jump);
 	assert!(!state.pressed(Jump));
+}
+
+#[test]
+fn bindings_of_one_source_on_an_absolute_axis_never_exceed_the_strongest_one() {
+	let mut state = state_with(&[Move, Rise]);
+
+	// WASD and the arrow keys are both forward.
+	frame(
+		&mut state,
+		&[
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::Y)),
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::Y)),
+			(SourceId::KEYBOARD, Rise, Signal::Axis1D(1.0)),
+			(SourceId::KEYBOARD, Rise, Signal::Axis1D(1.0)),
+		],
+	);
+	assert_eq!(state.axis2d(Move), Vec2::Y);
+	assert_eq!(state.axis1d(Rise), 1.0);
+
+	// Forward on one binding and sideways on the other stays a unit stick.
+	frame(
+		&mut state,
+		&[
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::Y)),
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::X)),
+		],
+	);
+	assert!((state.axis2d(Move).length() - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn opposite_bindings_of_one_source_still_cancel_on_an_absolute_axis() {
+	let mut state = state_with(&[Move, Rise]);
+
+	frame(
+		&mut state,
+		&[
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::Y)),
+			(SourceId::KEYBOARD, Move, Signal::Axis2D(Vec2::NEG_Y)),
+			(SourceId::KEYBOARD, Rise, Signal::Axis1D(1.0)),
+			(SourceId::KEYBOARD, Rise, Signal::Axis1D(-1.0)),
+		],
+	);
+
+	assert_eq!(state.axis2d(Move), Vec2::ZERO);
+	assert_eq!(state.axis1d(Rise), 0.0);
+}
+
+#[test]
+fn a_single_scaled_binding_on_an_absolute_axis_is_not_clamped() {
+	let mut state = state_with(&[Move]);
+
+	frame(
+		&mut state,
+		&[(
+			SourceId::KEYBOARD,
+			Move,
+			Signal::Axis2D(Vec2::new(0.0, 2.0)),
+		)],
+	);
+
+	assert_eq!(state.axis2d(Move), Vec2::new(0.0, 2.0));
+}
+
+#[test]
+fn relative_axes_still_sum_within_one_source() {
+	let mut state = state_with(&[Look, Zoom]);
+
+	frame(
+		&mut state,
+		&[
+			(SourceId::MOUSE, Look, Signal::Axis2D(Vec2::new(3.0, 0.0))),
+			(SourceId::MOUSE, Look, Signal::Axis2D(Vec2::new(4.0, 0.0))),
+			(SourceId::MOUSE, Zoom, Signal::Axis1D(1.0)),
+			(SourceId::MOUSE, Zoom, Signal::Axis1D(2.0)),
+		],
+	);
+
+	assert_eq!(state.axis2d(Look), Vec2::new(7.0, 0.0));
+	assert_eq!(state.axis1d(Zoom), 3.0);
 }

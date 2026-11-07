@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::core::input::{
 	action::{Action, ActionGroup},
-	signal::{Signal, ValueKind},
+	signal::{AxisMode, Signal, ValueKind},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -114,29 +114,50 @@ impl ActionState {
 		}
 
 		for slot in self.slots.values_mut() {
+			// Within one source, bindings of an absolute axis add up (W cancels S), but never beyond the
+			// strongest single binding: WASD and the arrow keys held together are still one stick at full
+			// tilt, not two. Relative axes (mouse motion) are deltas, so they do sum.
 			slot.signal = match slot.value_kind {
 				ValueKind::Button => Signal::Button(
 					slot.contributions
 						.iter()
 						.any(|(_, signal)| matches!(signal, Signal::Button(true))),
 				),
-				ValueKind::Axis1D(_) => {
+				ValueKind::Axis1D(mode) => {
 					let mut values = HashMap::<SourceId, f32>::new();
+					let mut limits = HashMap::<SourceId, f32>::new();
 
 					for (source, signal) in &slot.contributions {
 						if let Signal::Axis1D(value) = signal {
 							*values.entry(*source).or_default() += value;
+							let limit = limits.entry(*source).or_default();
+							*limit = limit.max(value.abs());
+						}
+					}
+
+					if mode == AxisMode::Absolute {
+						for (source, value) in &mut values {
+							*value = value.clamp(-limits[source], limits[source]);
 						}
 					}
 
 					Signal::Axis1D(resolve_owner(&mut slot.owner, &slot.contributions, &values))
 				}
-				ValueKind::Axis2D(_) => {
+				ValueKind::Axis2D(mode) => {
 					let mut values = HashMap::<SourceId, Vec2>::new();
+					let mut limits = HashMap::<SourceId, f32>::new();
 
 					for (source, signal) in &slot.contributions {
 						if let Signal::Axis2D(value) = signal {
 							*values.entry(*source).or_default() += value;
+							let limit = limits.entry(*source).or_default();
+							*limit = limit.max(value.length());
+						}
+					}
+
+					if mode == AxisMode::Absolute {
+						for (source, value) in &mut values {
+							*value = value.clamp_length_max(limits[source]);
 						}
 					}
 
