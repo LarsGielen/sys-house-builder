@@ -1,6 +1,8 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 
-use crate::core::input::{ActiveContexts, ButtonCombo, Keymap};
+use crate::core::input::{
+	action::Action, button_combo::ButtonCombo, context::ActiveContexts, keymap::Keymap,
+};
 
 /// Whether pressing a shortcut would do something right now. The hint only reports it: whatever
 /// draws the hint decides how each case looks.
@@ -29,7 +31,12 @@ pub struct InputHints<'w> {
 
 impl InputHints<'_> {
 	/// The shortcut to show for an action, or `None` if it has none.
-	pub fn for_action(&self, name: &'static str) -> Option<ShortcutHint> {
+	pub fn for_action(&self, action: impl Action) -> Option<ShortcutHint> {
+		self.for_action_named(action.name())
+	}
+
+	/// Like `for_action`, for a widget that only knows the name of its action.
+	pub fn for_action_named(&self, name: &str) -> Option<ShortcutHint> {
 		self.keymap.hints_for(name, &self.active).into_iter().next()
 	}
 }

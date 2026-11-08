@@ -7,10 +7,14 @@ use bevy::{
 };
 
 use crate::core::input::{
-	ActionState, AxisInput, ButtonBinding, ButtonCombo, Keymap, PhysicalButton,
+	axis_input::AxisInput,
+	binding::ButtonBinding,
+	button_combo::{ButtonCombo, PhysicalButton},
 	context::{ActiveContexts, Claim, ClaimedInput},
 	interpretation::Interpretation,
+	keymap::Keymap,
 	modifiers::ModifierSet,
+	state::ActionState,
 	value::Signal,
 };
 
@@ -241,8 +245,10 @@ pub(in crate::core::input) fn poll_axes(
 mod tests {
 	use super::*;
 	use crate::core::input::{
-		Action, ActionGroup, Block, InputContext, InputContexts, Modifier, ValueKind,
-		context::ActiveContexts,
+		action::{Action, ActionGroup},
+		context::{ActiveContexts, Block, InputContext, InputContexts},
+		modifiers::Modifier,
+		value::ValueKind,
 	};
 
 	#[derive(Clone, Copy)]

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::core::input::{Action, ActionState, sources::SourceId, value::Signal};
+use crate::core::input::{action::Action, sources::SourceId, state::ActionState, value::Signal};
 
 /// A widget was activated and stands for the action it names. The sources contribute it to the
 /// action as a press for one frame, like any other input.
@@ -62,7 +62,10 @@ pub(in crate::core::input) fn poll_ui_activations(
 mod tests {
 	use super::*;
 	use crate::core::input::{
-		ActionGroup, ActionState, AxisMode, InputAppExt, InputPlugin, ValueKind, action::Action,
+		action::{Action, ActionGroup},
+		plugin::{InputAppExt, InputPlugin},
+		state::ActionState,
+		value::{AxisMode, ValueKind},
 	};
 
 	#[derive(Clone, Copy)]

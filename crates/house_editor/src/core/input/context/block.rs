@@ -1,7 +1,7 @@
 use bevy::prelude::KeyCode;
 
 use crate::core::input::{
-	PhysicalButton,
+	button_combo::PhysicalButton,
 	context::{Claim, ClaimedInput},
 	modifiers::{Modifier, ModifierSet},
 };

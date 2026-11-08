@@ -1,10 +1,11 @@
 use bevy::{asset::io::file::FileAssetReader, prelude::*};
 
 use crate::core::input::{
-	ActionState, AxisBinding, ButtonBinding,
+	binding::{AxisBinding, ButtonBinding},
 	context::{ActiveContexts, Claim, InputContexts},
 	hints::{Availability, ShortcutHint},
 	keymap::{file::KeymapFile, validate::parse_context_bindings},
+	state::ActionState,
 };
 
 mod file;
@@ -185,9 +186,14 @@ impl Keymap {
 mod tests {
 	use super::*;
 	use crate::core::input::{
-		Action, ActionGroup, ActiveContexts, Availability, AxisInput, Block, InputContext,
-		InputContexts, Interpretation, Modifier, PhysicalButton, Scale, ValueKind,
-		modifiers::ModifierSet, value::AxisMode,
+		action::{Action, ActionGroup},
+		axis_input::{AxisInput, Scale},
+		button_combo::PhysicalButton,
+		context::{ActiveContexts, Block, InputContext, InputContexts},
+		hints::Availability,
+		interpretation::Interpretation,
+		modifiers::{Modifier, ModifierSet},
+		value::{AxisMode, ValueKind},
 	};
 
 	#[derive(Clone, Copy)]

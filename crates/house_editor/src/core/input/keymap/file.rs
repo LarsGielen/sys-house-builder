@@ -2,7 +2,11 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::core::input::{AxisInput, ButtonCombo, PhysicalButton, Scale, modifiers::ModifierSet};
+use crate::core::input::{
+	axis_input::{AxisInput, Scale},
+	button_combo::{ButtonCombo, PhysicalButton},
+	modifiers::ModifierSet,
+};
 
 // Unknown fields are rejected so that a file from before contexts (a top-level `[bindings]`) is
 // reported instead of being read as empty.

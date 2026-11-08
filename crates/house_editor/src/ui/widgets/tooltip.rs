@@ -118,7 +118,7 @@ fn update_tooltip(
 	let hint = target
 		.ui_action
 		.and_then(|action| action.0)
-		.and_then(|name| hints.for_action(name));
+		.and_then(|name| hints.for_action_named(name));
 	if text.0 != label {
 		text.0 = label.to_string();
 	}

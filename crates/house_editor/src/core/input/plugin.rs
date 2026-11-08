@@ -1,8 +1,11 @@
 use bevy::{input::InputSystems, prelude::*};
 
 use crate::core::input::{
-	ActionGroup, ActionState, ActiveContexts, InputContext, InputContexts, Keymap, context,
+	action::ActionGroup,
+	context::{self, ActiveContexts, InputContext, InputContexts},
+	keymap::Keymap,
 	sources::{self, poll_axes, poll_buttons, poll_ui_activations},
+	state::ActionState,
 };
 
 /// The phases of one input frame, in order. Source systems belong in `Sources`; consumers
@@ -114,7 +117,11 @@ mod tests {
 	use super::*;
 	use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 
-	use crate::core::input::{Action, AxisMode, InputContextRef, ValueKind};
+	use crate::core::input::{
+		action::Action,
+		context::InputContextRef,
+		value::{AxisMode, ValueKind},
+	};
 
 	#[derive(Clone, Copy)]
 	enum TestAction {

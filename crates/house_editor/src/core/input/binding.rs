@@ -1,5 +1,8 @@
 use crate::core::input::{
-	AxisInput, ButtonCombo, Scale, context::Claim, interpretation::Interpretation,
+	axis_input::{AxisInput, Scale},
+	button_combo::ButtonCombo,
+	context::Claim,
+	interpretation::Interpretation,
 	modifiers::ModifierSet,
 };
 

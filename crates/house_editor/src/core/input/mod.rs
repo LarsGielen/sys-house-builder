@@ -55,10 +55,3 @@ pub use plugin::{ActionSystems, InputAppExt, InputPlugin};
 pub use sources::{UiAction, UiActivated};
 pub use state::ActionState;
 pub use value::{AxisMode, ValueKind};
-
-// Used across the input modules, but not part of what the rest of the editor sees.
-pub(crate) use axis_input::{AxisInput, Scale};
-pub(crate) use binding::{AxisBinding, ButtonBinding};
-pub(crate) use button_combo::PhysicalButton;
-pub(crate) use context::ActiveContexts;
-pub(crate) use interpretation::Interpretation;

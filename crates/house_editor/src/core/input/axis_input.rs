@@ -4,7 +4,10 @@ use bevy::math::Vec2;
 use serde::Deserialize;
 
 use crate::core::input::{
-	AxisMode, PhysicalButton, ValueKind, context::ClaimedInput, sources::SourceId, value::Signal,
+	button_combo::PhysicalButton,
+	context::ClaimedInput,
+	sources::SourceId,
+	value::{AxisMode, Signal, ValueKind},
 };
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.

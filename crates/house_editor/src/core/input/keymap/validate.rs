@@ -1,9 +1,13 @@
 use std::collections::BTreeMap;
 
 use crate::core::input::{
-	ActionState, AxisBinding, ButtonBinding, ButtonCombo, Scale, ValueKind,
+	axis_input::Scale,
+	binding::{AxisBinding, ButtonBinding},
+	button_combo::ButtonCombo,
 	interpretation::Interpretation,
-	keymap::file::{Entry, ParsedEntry},
+	keymap::{file::Entry, file::ParsedEntry},
+	state::ActionState,
+	value::ValueKind,
 };
 
 /// Parses one context's bindings. A shortcut, or a button of a composite, may be used once per

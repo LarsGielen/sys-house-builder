@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use bevy::{log::warn_once, prelude::*};
 
-use crate::core::input::ButtonCombo;
+use crate::core::input::button_combo::ButtonCombo;
 
 mod block;
 mod claim;
@@ -189,7 +189,7 @@ mod tests {
 
 	use super::*;
 	use crate::core::input::{
-		PhysicalButton,
+		button_combo::PhysicalButton,
 		modifiers::{Modifier, ModifierSet},
 	};
 

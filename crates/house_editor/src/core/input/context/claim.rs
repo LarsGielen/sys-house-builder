@@ -1,4 +1,4 @@
-use crate::core::input::{PhysicalButton, modifiers::ModifierSet};
+use crate::core::input::{button_combo::PhysicalButton, modifiers::ModifierSet};
 
 /// An input as contexts see it: the thing a binding takes, whatever action it drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
