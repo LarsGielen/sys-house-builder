@@ -144,7 +144,7 @@ impl Keymap {
 		Self::parse(built_in, actions, contexts).expect("the built-in keymap.toml is valid")
 	}
 
-	// Builds the whole keymap before returning it, so an error never yields a partial keymap.
+	/// Builds the whole keymap before returning it, so an error never yields a partial keymap.
 	pub(crate) fn parse(
 		text: &str,
 		actions: &ActionState,

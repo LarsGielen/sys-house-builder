@@ -2,13 +2,15 @@ use bevy::prelude::*;
 
 use crate::core::input::{Action, ActionState, sources::SourceId, value::Signal};
 
+/// A widget was activated and stands for the action it names. The sources contribute it to the
+/// action as a press for one frame, like any other input.
 #[derive(Event)]
 pub struct UiActivated {
 	action: &'static str,
 	signal: Signal,
 }
 
-// Buffers an activation from `Update` until the sources run in the next `PreUpdate`.
+/// Buffers an activation from `Update` until the sources run in the next `PreUpdate`.
 #[derive(Message)]
 pub(in crate::core::input) struct PendingUiActivation {
 	action: &'static str,

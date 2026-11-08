@@ -9,11 +9,15 @@ use crate::core::input::{
 /// read the resolved state in `Update` or later, so they never see a half-built frame.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ActionSystems {
+	/// Starts the frame: clears last frame's contributions and rebuilds the active contexts.
 	Begin,
+	/// Where the sources contribute to the actions.
 	Sources,
+	/// Combines the contributions into the value of each action.
 	Resolve,
 }
 
+/// Registration of actions and contexts at app startup.
 pub trait InputAppExt {
 	/// Registers every action of the group, so the keymap can be bound to them by name.
 	/// Must run before the keymap is loaded.
@@ -44,6 +48,8 @@ impl InputAppExt for App {
 	}
 }
 
+/// Adds the action state, the context stack and the sources. The [`Keymap`] is inserted
+/// separately, once the actions and contexts it names have been registered.
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
@@ -70,7 +76,6 @@ impl Plugin for InputPlugin {
 
 		// The keymap is inserted by the plugin that registers the actions, so the keymap sources
 		// skip frames until it exists instead of requiring a plugin order.
-		// button input
 		app.add_systems(
 			PreUpdate,
 			poll_buttons
@@ -78,7 +83,6 @@ impl Plugin for InputPlugin {
 				.run_if(resource_exists::<Keymap>),
 		);
 
-		// axis input
 		app.add_systems(
 			PreUpdate,
 			poll_axes

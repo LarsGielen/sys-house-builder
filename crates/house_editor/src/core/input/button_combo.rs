@@ -9,6 +9,8 @@ use crate::core::input::{
 	sources::SourceId,
 };
 
+/// One button of a device: a key, a mouse button or a modifier key. Which modifiers are held with
+/// it is not part of it, see `ButtonCombo`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum PhysicalButton {
 	Key(KeyCode),
@@ -95,6 +97,8 @@ impl PhysicalButton {
 	}
 }
 
+/// A button with the exact modifiers that must be held when it is pressed, such as `ctrl+shift+z`.
+/// This is what the keymap file and the tooltips call a shortcut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ButtonCombo {
 	input: PhysicalButton,
@@ -117,7 +121,7 @@ impl ButtonCombo {
 		Self { input, modifiers }
 	}
 
-	// Modifiers must match exactly so that Ctrl+Shift+Z does not also fire the Ctrl+Z binding.
+	/// Modifiers must match exactly so that Ctrl+Shift+Z does not also fire the Ctrl+Z binding.
 	pub(crate) fn just_pressed(
 		&self,
 		keys: &ButtonInput<KeyCode>,
@@ -127,8 +131,8 @@ impl ButtonCombo {
 			&& self.modifiers == self.input.other_modifiers(keys)
 	}
 
-	// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
-	// releasing one mid-drag must not end the drag.
+	/// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
+	/// releasing one mid-drag must not end the drag.
 	pub(crate) fn pressed(
 		&self,
 		keys: &ButtonInput<KeyCode>,

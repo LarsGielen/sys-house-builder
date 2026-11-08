@@ -114,9 +114,10 @@ pub(super) fn parse_context_bindings(
 	Ok((button_bindings, axis_bindings))
 }
 
-/// Within a context, a button with its modifiers may be used by one binding only. Otherwise one press would drive
-/// two actions, such as `s` saving while it also moves the camera back. Equal shortcuts and equal
-/// composites are already rejected while parsing, so only the directions of composites remain.
+/// Within a context, a button with its modifiers may be used by one binding only. Otherwise one
+/// press would drive two actions, such as `s` saving while it also moves the camera back. Equal
+/// shortcuts and equal composites are already rejected while parsing, so only the directions of
+/// composites remain.
 fn check_direction_conflicts(
 	button_bindings: &[ButtonBinding],
 	axis_bindings: &[AxisBinding],

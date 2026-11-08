@@ -10,6 +10,8 @@ pub enum Modifier {
 	Alt,
 }
 
+/// The modifier keys held together, where left and right count as one. Bindings compare it for
+/// equality, so a binding that needs `ctrl` does not match `ctrl+shift`.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub(crate) struct ModifierSet {
 	pub ctrl: bool,

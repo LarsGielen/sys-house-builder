@@ -8,28 +8,40 @@ use crate::core::input::{
 	value::{Signal, ValueKind},
 };
 
+/// Everything the state keeps for one action.
 struct ActionSlot {
 	value_kind: ValueKind,
+	/// The resolved value of this frame.
 	signal: Signal,
+	/// The resolved value of the frame before, for `just_pressed` and the like.
 	previous_signal: Signal,
+	/// What the sources contributed this frame.
 	contributions: Vec<(SourceId, Signal)>,
+	/// The source that drives an axis until it returns to neutral.
 	owner: Option<SourceId>,
-	toggled: bool,     // The value of a toggle, which the slot keeps between frames.
-	was_pressed: bool, // Whether a toggle was pressed last frame, so that holding the key flips it once.
+	/// The value of a toggle, which the slot keeps between frames.
+	toggled: bool,
+	/// Whether a toggle was pressed last frame, so that holding the key flips it once.
+	was_pressed: bool,
 }
 
 #[derive(Debug)]
 pub(crate) enum ContributionError {
+	/// No action with this name was registered.
 	Unregistered,
+	/// The signal does not fit the action's value kind, such as an axis value for a button.
 	WrongKind,
 }
 
+/// The value of every registered action this frame, for consumers to read. Sources contribute to
+/// it in `ActionSystems::Sources`, and it is resolved in `ActionSystems::Resolve`.
 #[derive(Default, Resource)]
 pub struct ActionState {
 	slots: HashMap<&'static str, ActionSlot>,
 }
 
 impl ActionState {
+	/// Adds an action. Registering a name again resets that action.
 	pub(crate) fn register(&mut self, action: impl Action) {
 		self.slots.insert(
 			action.name(),
@@ -56,10 +68,13 @@ impl ActionState {
 		self.slots.get_key_value(name).map(|(name, _)| *name)
 	}
 
+	/// The value kind of the action with this name, or `None` if it is not registered.
 	pub(crate) fn value_kind_of(&self, name: &str) -> Option<ValueKind> {
 		self.slots.get(name).map(|slot| slot.value_kind)
 	}
 
+	/// Begins a frame: the resolved values become the previous ones, and last frame's
+	/// contributions are dropped.
 	pub(crate) fn start_frame(&mut self) {
 		for slot in self.slots.values_mut() {
 			slot.previous_signal = slot.signal;
@@ -67,6 +82,8 @@ impl ActionState {
 		}
 	}
 
+	/// Adds one source's signal for this frame, to be combined by `resolve`. Fails if the action is
+	/// not registered or the signal does not fit its value kind.
 	pub(crate) fn contribute_named(
 		&mut self,
 		source: SourceId,
@@ -85,12 +102,16 @@ impl ActionState {
 		Ok(())
 	}
 
+	/// Combines the contributions of every action into its value. Run once per frame, after all
+	/// sources.
 	pub(crate) fn resolve(&mut self) {
 		for slot in self.slots.values_mut() {
 			slot.resolve();
 		}
 	}
 
+	/// Whether a button action is held. False for any other kind of action, toggles included: see
+	/// `toggled`.
 	pub fn pressed(&self, action: impl Action) -> bool {
 		let Some(slot) = self.slots.get(action.name()) else {
 			return false;
@@ -102,6 +123,7 @@ impl ActionState {
 		)
 	}
 
+	/// Whether a button action became held this frame.
 	pub fn just_pressed(&self, action: impl Action) -> bool {
 		let Some(slot) = self.slots.get(action.name()) else {
 			return false;
@@ -117,6 +139,7 @@ impl ActionState {
 		)
 	}
 
+	/// Whether a button action stopped being held this frame.
 	pub fn just_released(&self, action: impl Action) -> bool {
 		let Some(slot) = self.slots.get(action.name()) else {
 			return false;
@@ -137,6 +160,7 @@ impl ActionState {
 		self.toggled_named(action.name())
 	}
 
+	/// Like `toggled`, for a widget that only knows the name of its action.
 	pub fn toggled_named(&self, name: &str) -> bool {
 		self.slots
 			.get(name)
@@ -150,6 +174,8 @@ impl ActionState {
 		})
 	}
 
+	/// The value of a 1D axis action this frame, or 0 for any other kind. A relative axis is the
+	/// change since last frame.
 	pub fn axis1d(&self, action: impl Action) -> f32 {
 		match self.slots.get(action.name()).map(|slot| slot.signal) {
 			Some(Signal::Axis1D(value)) => value,
@@ -157,6 +183,8 @@ impl ActionState {
 		}
 	}
 
+	/// The value of a 2D axis action this frame, or zero for any other kind. A relative axis is the
+	/// change since last frame.
 	pub fn axis2d(&self, action: impl Action) -> Vec2 {
 		match self.slots.get(action.name()).map(|slot| slot.signal) {
 			Some(Signal::Axis2D(value)) => value,

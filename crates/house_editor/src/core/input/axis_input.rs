@@ -54,8 +54,8 @@ impl AxisInput {
 		Ok(composite)
 	}
 
-	/// The name stored in the keymap file. Composites have none: they are written as a table.
-	// Stable, even if a variant is renamed.
+	/// The name stored in the keymap file, which stays the same even if a variant is renamed.
+	/// Composites have none: they are written as a table.
 	pub fn name(self) -> Option<&'static str> {
 		match self {
 			Self::MouseMotion => Some("mouse_motion"),
@@ -139,7 +139,8 @@ impl AxisInput {
 impl FromStr for AxisInput {
 	type Err = String;
 
-	/// Parses the name of a mouse axis input, case-insensitive. Composites are not named.
+	/// Parses the name of an axis input (`mouse_motion`, `scroll`), case-insensitive. Composites
+	/// are not named.
 	fn from_str(text: &str) -> Result<Self, String> {
 		let name = text.trim().to_ascii_lowercase();
 		Self::NAMED
