@@ -1,4 +1,4 @@
-use crate::core::input::signal::ValueKind;
+use crate::core::input::value::ValueKind;
 
 pub trait Action: Copy {
 	// Stable and unique across all groups (ex: camera.orbit)

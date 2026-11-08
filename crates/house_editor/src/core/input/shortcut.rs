@@ -4,77 +4,10 @@ use bevy::prelude::*;
 
 use crate::core::input::{
 	context::{Claim, ClaimedInput},
+	input_names::{KEY_NAMES, MOUSE_BUTTON_NAMES},
 	modifiers::{Modifier, Modifiers},
-	state::SourceId,
+	sources::SourceId,
 };
-
-const KEY_NAMES: &[(&str, KeyCode)] = &[
-	("a", KeyCode::KeyA),
-	("b", KeyCode::KeyB),
-	("c", KeyCode::KeyC),
-	("d", KeyCode::KeyD),
-	("e", KeyCode::KeyE),
-	("f", KeyCode::KeyF),
-	("g", KeyCode::KeyG),
-	("h", KeyCode::KeyH),
-	("i", KeyCode::KeyI),
-	("j", KeyCode::KeyJ),
-	("k", KeyCode::KeyK),
-	("l", KeyCode::KeyL),
-	("m", KeyCode::KeyM),
-	("n", KeyCode::KeyN),
-	("o", KeyCode::KeyO),
-	("p", KeyCode::KeyP),
-	("q", KeyCode::KeyQ),
-	("r", KeyCode::KeyR),
-	("s", KeyCode::KeyS),
-	("t", KeyCode::KeyT),
-	("u", KeyCode::KeyU),
-	("v", KeyCode::KeyV),
-	("w", KeyCode::KeyW),
-	("x", KeyCode::KeyX),
-	("y", KeyCode::KeyY),
-	("z", KeyCode::KeyZ),
-	("0", KeyCode::Digit0),
-	("1", KeyCode::Digit1),
-	("2", KeyCode::Digit2),
-	("3", KeyCode::Digit3),
-	("4", KeyCode::Digit4),
-	("5", KeyCode::Digit5),
-	("6", KeyCode::Digit6),
-	("7", KeyCode::Digit7),
-	("8", KeyCode::Digit8),
-	("9", KeyCode::Digit9),
-	("f1", KeyCode::F1),
-	("f2", KeyCode::F2),
-	("f3", KeyCode::F3),
-	("f4", KeyCode::F4),
-	("f5", KeyCode::F5),
-	("f6", KeyCode::F6),
-	("f7", KeyCode::F7),
-	("f8", KeyCode::F8),
-	("f9", KeyCode::F9),
-	("f10", KeyCode::F10),
-	("f11", KeyCode::F11),
-	("f12", KeyCode::F12),
-	("space", KeyCode::Space),
-	("enter", KeyCode::Enter),
-	("escape", KeyCode::Escape),
-	("tab", KeyCode::Tab),
-	("backspace", KeyCode::Backspace),
-	("delete", KeyCode::Delete),
-	("up", KeyCode::ArrowUp),
-	("down", KeyCode::ArrowDown),
-	("left", KeyCode::ArrowLeft),
-	("right", KeyCode::ArrowRight),
-];
-
-// Prefixed so they cannot collide with key names such as "left", which is the arrow key.
-const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
-	("mouse_left", MouseButton::Left),
-	("mouse_middle", MouseButton::Middle),
-	("mouse_right", MouseButton::Right),
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShortcutInput {
@@ -272,5 +205,98 @@ impl FromStr for Shortcut {
 }
 
 #[cfg(test)]
-#[path = "tests/shortcut_tests.rs"]
-mod tests;
+mod tests {
+	use super::*;
+	use crate::core::input::modifiers::{Modifier, Modifiers};
+
+	#[test]
+	fn shortcut_parsing_is_case_insensitive_and_checks_modifiers() {
+		let shortcut: Shortcut = "Ctrl+Shift+Z".parse().unwrap();
+		assert_eq!(shortcut.input, ShortcutInput::Key(KeyCode::KeyZ));
+		assert!(shortcut.modifiers.ctrl && shortcut.modifiers.shift && !shortcut.modifiers.alt);
+
+		assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
+		assert!("meta+z".parse::<Shortcut>().is_err());
+		assert!("ctrl+".parse::<Shortcut>().is_err());
+	}
+
+	#[test]
+	fn displays_shortcuts_for_the_user() {
+		let shortcut: Shortcut = "ctrl+shift+z".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "Ctrl+Shift+Z");
+
+		let shortcut: Shortcut = "f5".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "F5");
+	}
+
+	#[test]
+	fn parses_mouse_buttons_without_confusing_them_with_arrow_keys() {
+		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(shortcut.input, ShortcutInput::Mouse(MouseButton::Middle));
+		assert!(shortcut.modifiers.shift);
+
+		let arrow: Shortcut = "ctrl+left".parse().unwrap();
+		assert_eq!(arrow.input, ShortcutInput::Key(KeyCode::ArrowLeft));
+
+		assert!("mouse_back".parse::<Shortcut>().is_err());
+	}
+
+	#[test]
+	fn displays_mouse_shortcuts_for_the_user() {
+		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(shortcut.to_string(), "Shift+Mouse middle");
+	}
+
+	#[test]
+	fn mouse_shortcut_requires_exact_modifiers_when_pressed() {
+		let orbit: Shortcut = "mouse_middle".parse().unwrap();
+		let pan: Shortcut = "shift+mouse_middle".parse().unwrap();
+
+		let mut keys = ButtonInput::<KeyCode>::default();
+		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
+		keys.press(KeyCode::ShiftLeft);
+		mouse_buttons.press(MouseButton::Middle);
+
+		assert!(pan.just_pressed(&keys, &mouse_buttons));
+		assert!(!orbit.just_pressed(&keys, &mouse_buttons));
+	}
+
+	#[test]
+	fn a_modifier_key_is_a_shortcut_input() {
+		let shift: Shortcut = "shift".parse().unwrap();
+		assert_eq!(shift.input, ShortcutInput::Modifier(Modifier::Shift));
+		assert_eq!(shift.modifiers, Modifiers::default());
+		assert_eq!(shift.to_string(), "Shift");
+
+		let both: Shortcut = "ctrl+shift".parse().unwrap();
+		assert_eq!(both.input, ShortcutInput::Modifier(Modifier::Shift));
+		assert!(both.modifiers.ctrl && !both.modifiers.shift);
+		assert_eq!(both.to_string(), "Ctrl+Shift");
+	}
+
+	#[test]
+	fn a_modifier_key_cannot_be_its_own_modifier() {
+		assert!("shift+shift".parse::<Shortcut>().is_err());
+		assert!("ctrl+shift+ctrl".parse::<Shortcut>().is_err());
+	}
+
+	#[test]
+	fn a_modifier_shortcut_needs_only_the_other_modifiers() {
+		let mut keys = ButtonInput::<KeyCode>::default();
+		let mouse = ButtonInput::<MouseButton>::default();
+		let shift: Shortcut = "shift".parse().unwrap();
+		let ctrl_shift: Shortcut = "ctrl+shift".parse().unwrap();
+
+		// Either shift key counts, and Shift itself is not an extra modifier.
+		keys.press(KeyCode::ShiftRight);
+		assert!(shift.just_pressed(&keys, &mouse));
+		assert!(!ctrl_shift.just_pressed(&keys, &mouse));
+
+		keys.clear();
+		keys.press(KeyCode::ControlLeft);
+		keys.clear();
+		keys.press(KeyCode::ShiftLeft);
+		assert!(ctrl_shift.just_pressed(&keys, &mouse));
+		assert!(!shift.just_pressed(&keys, &mouse));
+	}
+}
