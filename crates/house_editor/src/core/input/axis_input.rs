@@ -4,7 +4,11 @@ use bevy::math::Vec2;
 use serde::Deserialize;
 
 use crate::core::input::{
-	AxisMode, ShortcutInput, ValueKind, modifiers::Modifiers, signal::Signal, state::SourceId,
+	AxisMode, ShortcutInput, ValueKind,
+	context::{Claim, ClaimedInput},
+	modifiers::Modifiers,
+	signal::Signal,
+	state::SourceId,
 };
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.
@@ -86,6 +90,20 @@ impl AxisInput {
 				left,
 				right,
 			} => vec![up, down, left, right],
+		}
+	}
+
+	/// What this input takes from lower contexts: the mouse input itself, or each button of a
+	/// composite.
+	pub(crate) fn claimed_inputs(self) -> Vec<ClaimedInput> {
+		match self {
+			Self::MouseMotion => vec![ClaimedInput::MouseMotion],
+			Self::Scroll => vec![ClaimedInput::Scroll],
+			_ => self
+				.directions()
+				.into_iter()
+				.map(ClaimedInput::Button)
+				.collect(),
 		}
 	}
 
@@ -192,7 +210,7 @@ impl Scale {
 			return Err(match kind {
 				ValueKind::Axis2D(_) => "a 2D axis needs a scale of the form [x, y]".to_string(),
 				ValueKind::Axis1D(_) => "a 1D axis needs a single number as scale".to_string(),
-				ValueKind::Button => "a button cannot have a scale".to_string(),
+				ValueKind::Button | ValueKind::Toggle => "a button cannot have a scale".to_string(),
 			});
 		}
 		if factors
@@ -225,6 +243,23 @@ pub struct AxisBinding {
 	pub modifiers: Modifiers,
 	pub scale: Scale,
 	pub action: &'static str,
+	/// The context whose section of the keymap holds this binding.
+	pub context: &'static str,
+}
+
+impl AxisBinding {
+	/// Every input and modifier combination this binding takes, for contexts to decide who
+	/// handles it.
+	pub(crate) fn claims(&self) -> Vec<Claim> {
+		self.input
+			.claimed_inputs()
+			.into_iter()
+			.map(|input| Claim {
+				input,
+				modifiers: self.modifiers,
+			})
+			.collect()
+	}
 }
 
 #[cfg(test)]

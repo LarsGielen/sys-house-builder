@@ -17,7 +17,7 @@ mod viewport;
 
 use dock::dock;
 use top_bar::top_bar;
-use viewport::viewport;
+use viewport::{sync_viewport_context, viewport};
 
 impl Plugin for EditorScreenPlugin {
 	fn build(&self, app: &mut App) {
@@ -25,6 +25,10 @@ impl Plugin for EditorScreenPlugin {
 		app.add_systems(
 			OnEnter(AppState::Editor),
 			spawn_editor_screen.after(setup_editor),
+		);
+		app.add_systems(
+			Update,
+			sync_viewport_context.run_if(in_state(AppState::Editor)),
 		);
 	}
 }

@@ -2,7 +2,11 @@ use std::{fmt, str::FromStr};
 
 use bevy::prelude::*;
 
-use crate::core::input::{modifiers::Modifiers, state::SourceId};
+use crate::core::input::{
+	context::{Claim, ClaimedInput},
+	modifiers::{Modifier, Modifiers},
+	state::SourceId,
+};
 
 const KEY_NAMES: &[(&str, KeyCode)] = &[
 	("a", KeyCode::KeyA),
@@ -76,10 +80,18 @@ const MOUSE_BUTTON_NAMES: &[(&str, MouseButton)] = &[
 pub enum ShortcutInput {
 	Key(KeyCode),
 	Mouse(MouseButton),
+	Modifier(Modifier),
 }
 
 impl ShortcutInput {
 	pub(crate) fn from_name(name: &str) -> Option<Self> {
+		let modifier = Modifier::NAMES
+			.iter()
+			.find(|(modifier_name, _)| *modifier_name == name);
+		if let Some((_, modifier)) = modifier {
+			return Some(Self::Modifier(*modifier));
+		}
+
 		let key = KEY_NAMES.iter().find(|(key_name, _)| *key_name == name);
 		let button = MOUSE_BUTTON_NAMES
 			.iter()
@@ -101,6 +113,20 @@ impl ShortcutInput {
 				.iter()
 				.find(|(_, other)| other == button)
 				.map(|(name, _)| *name),
+			Self::Modifier(modifier) => Modifier::NAMES
+				.iter()
+				.find(|(_, other)| other == modifier)
+				.map(|(name, _)| *name),
+		}
+	}
+
+	/// The modifiers held besides this input. A modifier key is not its own modifier, so a
+	/// shortcut on `shift` itself needs no Shift to be held, and `ctrl+shift` means Ctrl is held.
+	pub(crate) fn other_modifiers(&self, keys: &ButtonInput<KeyCode>) -> Modifiers {
+		let held = Modifiers::from_keys(keys);
+		match self {
+			Self::Modifier(modifier) => held.without(*modifier),
+			Self::Key(_) | Self::Mouse(_) => held,
 		}
 	}
 
@@ -112,12 +138,13 @@ impl ShortcutInput {
 		match self {
 			Self::Key(key) => keys.just_pressed(*key),
 			Self::Mouse(button) => mouse_buttons.just_pressed(*button),
+			Self::Modifier(modifier) => modifier.just_pressed(keys),
 		}
 	}
 
 	pub(crate) fn source(&self) -> SourceId {
 		match self {
-			Self::Key(_) => SourceId::KEYBOARD,
+			Self::Key(_) | Self::Modifier(_) => SourceId::KEYBOARD,
 			Self::Mouse(_) => SourceId::MOUSE,
 		}
 	}
@@ -130,6 +157,7 @@ impl ShortcutInput {
 		match self {
 			Self::Key(key) => keys.pressed(*key),
 			Self::Mouse(button) => mouse_buttons.pressed(*button),
+			Self::Modifier(modifier) => modifier.pressed(keys),
 		}
 	}
 }
@@ -141,6 +169,17 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
+	/// `ctrl+<key>`, for rules in code such as a context that lets Ctrl+S through.
+	pub fn ctrl(key: KeyCode) -> Self {
+		Self {
+			input: ShortcutInput::Key(key),
+			modifiers: Modifiers {
+				ctrl: true,
+				..Modifiers::default()
+			},
+		}
+	}
+
 	pub(crate) fn new(input: ShortcutInput, modifiers: Modifiers) -> Self {
 		Self { input, modifiers }
 	}
@@ -151,7 +190,8 @@ impl Shortcut {
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
 	) -> bool {
-		self.input.just_pressed(keys, mouse_buttons) && self.modifiers == Modifiers::from_keys(keys)
+		self.input.just_pressed(keys, mouse_buttons)
+			&& self.modifiers == self.input.other_modifiers(keys)
 	}
 
 	// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
@@ -166,6 +206,14 @@ impl Shortcut {
 
 	pub(crate) fn source(&self) -> SourceId {
 		self.input.source()
+	}
+
+	/// The input and modifiers this shortcut takes, for contexts to decide who handles it.
+	pub(crate) fn claim(&self) -> Claim {
+		Claim {
+			input: ClaimedInput::Button(self.input),
+			modifiers: self.modifiers,
+		}
 	}
 }
 
@@ -211,6 +259,13 @@ impl FromStr for Shortcut {
 			.map_err(|error| format!("{error} in \"{text}\""))?;
 		let input = ShortcutInput::from_name(&key_name)
 			.ok_or_else(|| format!("unknown key or mouse button \"{key_name}\" in \"{text}\""))?;
+		if let ShortcutInput::Modifier(modifier) = input
+			&& modifiers.contains(modifier)
+		{
+			return Err(format!(
+				"\"{key_name}\" cannot be its own modifier in \"{text}\""
+			));
+		}
 
 		Ok(Shortcut { input, modifiers })
 	}

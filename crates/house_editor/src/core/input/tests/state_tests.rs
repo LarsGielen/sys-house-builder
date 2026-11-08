@@ -9,6 +9,7 @@ enum TestAction {
 	Zoom,
 	Look,
 	Rise,
+	Snap,
 }
 
 impl Action for TestAction {
@@ -19,6 +20,7 @@ impl Action for TestAction {
 			TestAction::Zoom => "test.zoom",
 			TestAction::Look => "test.look",
 			TestAction::Rise => "test.rise",
+			TestAction::Snap => "test.snap",
 		}
 	}
 	fn value(self) -> ValueKind {
@@ -28,11 +30,12 @@ impl Action for TestAction {
 			TestAction::Zoom => ValueKind::Axis1D(AxisMode::Relative),
 			TestAction::Look => ValueKind::Axis2D(AxisMode::Relative),
 			TestAction::Rise => ValueKind::Axis1D(AxisMode::Absolute),
+			TestAction::Snap => ValueKind::Toggle,
 		}
 	}
 }
 
-use TestAction::{Jump, Look, Move, Rise, Zoom};
+use TestAction::{Jump, Look, Move, Rise, Snap, Zoom};
 
 const CONTROLLER: SourceId = SourceId(3);
 const UI: SourceId = SourceId(4);
@@ -518,4 +521,78 @@ fn relative_axes_still_sum_within_one_source() {
 
 	assert_eq!(state.axis2d(Look), Vec2::new(7.0, 0.0));
 	assert_eq!(state.axis1d(Zoom), 3.0);
+}
+
+// ## Toggles ## //
+
+const PRESS: Signal = Signal::Button(true);
+
+#[test]
+fn a_press_flips_a_toggle_and_the_next_press_flips_it_back() {
+	let mut state = state_with(&[Snap]);
+	assert!(!state.toggled(Snap));
+
+	frame(&mut state, &[(SourceId::KEYBOARD, Snap, PRESS)]);
+	assert!(state.toggled(Snap));
+	assert!(state.just_toggled(Snap));
+
+	frame(&mut state, &[]);
+	assert!(state.toggled(Snap), "the value outlives the press");
+	assert!(!state.just_toggled(Snap));
+
+	frame(&mut state, &[(SourceId::KEYBOARD, Snap, PRESS)]);
+	assert!(!state.toggled(Snap));
+	assert!(state.just_toggled(Snap));
+}
+
+#[test]
+fn a_held_press_flips_a_toggle_once() {
+	let mut state = state_with(&[Snap]);
+
+	for _ in 0..3 {
+		frame(&mut state, &[(SourceId::KEYBOARD, Snap, PRESS)]);
+	}
+
+	assert!(state.toggled(Snap));
+}
+
+#[test]
+fn two_sources_pressing_together_flip_a_toggle_once() {
+	let mut state = state_with(&[Snap]);
+
+	frame(
+		&mut state,
+		&[
+			(SourceId::KEYBOARD, Snap, PRESS),
+			(SourceId::UI, Snap, PRESS),
+		],
+	);
+
+	assert!(state.toggled(Snap));
+}
+
+#[test]
+fn a_toggle_takes_button_signals_only() {
+	let mut state = state_with(&[Snap]);
+
+	assert!(
+		state
+			.contribute_named(SourceId::UI, Snap.name(), Signal::Axis1D(1.0))
+			.is_err()
+	);
+	assert!(
+		state
+			.contribute_named(SourceId::UI, Snap.name(), PRESS)
+			.is_ok()
+	);
+}
+
+#[test]
+fn a_toggle_is_not_a_pressed_button() {
+	let mut state = state_with(&[Snap]);
+
+	frame(&mut state, &[(SourceId::KEYBOARD, Snap, PRESS)]);
+
+	assert!(!state.pressed(Snap));
+	assert!(!state.just_pressed(Snap));
 }

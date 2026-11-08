@@ -2,6 +2,14 @@ use std::{fmt, str::FromStr};
 
 use bevy::input::{ButtonInput, keyboard::KeyCode};
 
+/// A modifier key, left or right.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum Modifier {
+	Ctrl,
+	Shift,
+	Alt,
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub struct Modifiers {
 	pub ctrl: bool,
@@ -10,6 +18,23 @@ pub struct Modifiers {
 }
 
 impl Modifiers {
+	pub fn without(mut self, modifier: Modifier) -> Self {
+		match modifier {
+			Modifier::Ctrl => self.ctrl = false,
+			Modifier::Shift => self.shift = false,
+			Modifier::Alt => self.alt = false,
+		}
+		self
+	}
+
+	pub fn contains(&self, modifier: Modifier) -> bool {
+		match modifier {
+			Modifier::Ctrl => self.ctrl,
+			Modifier::Shift => self.shift,
+			Modifier::Alt => self.alt,
+		}
+	}
+
 	pub fn from_keys(button_input: &ButtonInput<KeyCode>) -> Modifiers {
 		Modifiers {
 			ctrl: button_input.pressed(KeyCode::ControlLeft)
@@ -18,6 +43,30 @@ impl Modifiers {
 				|| button_input.pressed(KeyCode::ShiftRight),
 			alt: button_input.pressed(KeyCode::AltLeft) || button_input.pressed(KeyCode::AltRight),
 		}
+	}
+}
+
+impl Modifier {
+	pub(crate) const NAMES: [(&'static str, Modifier); 3] = [
+		("ctrl", Modifier::Ctrl),
+		("shift", Modifier::Shift),
+		("alt", Modifier::Alt),
+	];
+
+	fn keys(self) -> [KeyCode; 2] {
+		match self {
+			Modifier::Ctrl => [KeyCode::ControlLeft, KeyCode::ControlRight],
+			Modifier::Shift => [KeyCode::ShiftLeft, KeyCode::ShiftRight],
+			Modifier::Alt => [KeyCode::AltLeft, KeyCode::AltRight],
+		}
+	}
+
+	pub(crate) fn pressed(self, keys: &ButtonInput<KeyCode>) -> bool {
+		self.keys().into_iter().any(|key| keys.pressed(key))
+	}
+
+	pub(crate) fn just_pressed(self, keys: &ButtonInput<KeyCode>) -> bool {
+		self.keys().into_iter().any(|key| keys.just_pressed(key))
 	}
 }
 

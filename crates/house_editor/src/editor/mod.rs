@@ -2,7 +2,9 @@ use bevy::{camera::RenderTarget, prelude::*, render::render_resource::TextureFor
 
 use crate::{
 	app_state::AppState,
-	core::input::{ActionState, InputPlugin, Keymap},
+	core::input::{
+		ActionState, InputAppExt, InputContext, InputContextRef, InputContexts, InputPlugin, Keymap,
+	},
 	editor::{
 		camera::{OrbitCamera, OrbitCameraPlugin},
 		inputs::EditorInputPlugin,
@@ -12,10 +14,16 @@ use crate::{
 mod camera;
 pub mod inputs;
 
+pub const GLOBAL_CONTEXT: &str = "global";
+pub const VIEWPORT_CONTEXT: &str = "viewport";
+
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(InputPlugin);
+
+		app.add_input_context(InputContext::new(GLOBAL_CONTEXT).priority(0))
+			.add_input_context(InputContext::new(VIEWPORT_CONTEXT).priority(10));
 
 		app.add_plugins(EditorInputPlugin);
 		app.add_plugins(OrbitCameraPlugin);
@@ -25,6 +33,7 @@ impl Plugin for EditorPlugin {
 
 		app.insert_resource(Keymap::load(
 			app.world().resource::<ActionState>(),
+			app.world().resource::<InputContexts>(),
 			include_str!("../../assets/keymap.toml"),
 		));
 	}
@@ -59,6 +68,11 @@ pub(crate) fn setup_editor(
 		))
 		.id();
 	commands.insert_resource(ViewportCamera(camera));
+	commands.spawn((
+		Name::new("Global input context"),
+		InputContextRef(GLOBAL_CONTEXT),
+		DespawnOnExit::<AppState>(AppState::Editor),
+	));
 
 	// Temporary scene for checking the camera; remove once real geometry is rendered.
 	commands.spawn((

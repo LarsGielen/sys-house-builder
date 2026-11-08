@@ -1,6 +1,10 @@
 use bevy::{picking::hover::Hovered, prelude::*, ui::RelativeCursorPosition};
 
-use crate::ui::theme::{colors, editor_layout};
+use crate::{
+	core::input::InputContextRef,
+	editor::VIEWPORT_CONTEXT,
+	ui::theme::{colors, editor_layout},
+};
 
 pub fn viewport_node(camera: Entity) -> impl Scene {
 	bsn! {
@@ -30,5 +34,26 @@ pub(super) fn viewport(camera: Entity) -> impl Scene + use<> {
 				border_radius: BorderRadius::all(px(editor_layout::PANEL_RADIUS - 1.0)),
 			}
 		]
+	}
+}
+
+/// The viewport's context exists while the cursor is over it, so the camera controls act only
+/// there and bindings of other contexts are free elsewhere.
+pub(super) fn sync_viewport_context(
+	viewports: Query<(Entity, &Hovered, Has<InputContextRef>), With<ViewportNode>>,
+	mut commands: Commands,
+) {
+	for (entity, hovered, has_context) in &viewports {
+		match (hovered.get(), has_context) {
+			(true, false) => {
+				commands
+					.entity(entity)
+					.insert(InputContextRef(VIEWPORT_CONTEXT));
+			}
+			(false, true) => {
+				commands.entity(entity).remove::<InputContextRef>();
+			}
+			_ => {}
+		}
 	}
 }

@@ -1,22 +1,22 @@
-# Keyboard shortcuts. Each action maps to one or more shortcuts.
-# Modifiers: ctrl, shift, alt. A shortcut can be bound to only one action.
-[bindings]
+# Keyboard and mouse bindings. Each context has a section; each action maps to one or more inputs.
+# Modifiers: ctrl, shift, alt. Within a context an input, with its modifiers, can be bound once.
+# A context that is higher in the stack takes an input it binds from the contexts below it.
+
+# Active whenever the editor is open.
+[contexts.global.bindings]
 "editor.undo" = ["ctrl+z"]
 "editor.redo" = ["ctrl+shift+z", "ctrl+y"]
 "editor.save" = ["ctrl+s"]
 "editor.open" = ["ctrl+o"]
+"editor.toggle_snap" = ["g"]
 
-# Held controls. Modifiers only choose the control when it starts, so releasing one mid-drag keeps it going.
+# Active while the cursor is over the viewport.
+[contexts.viewport.bindings]
 "camera.orbit" = ["mouse_right"]
 "camera.pan" = ["shift+mouse_right"]
 
-# Mouse axes. Motion drives looking and scroll drives zooming. Modifiers work as for shortcuts and
-# must match exactly, so "scroll" stops while Shift is held and "shift+scroll" can take over.
 "camera.look" = ["mouse_motion", "shift+mouse_motion"]
 "camera.zoom" = ["scroll"]
-
-# Held directions. A composite turns four buttons (1d: two) into one axis; the buttons can be keys
-# or mouse buttons. A button, with its modifiers, can belong to one binding only.
 "camera.move" = [
 	{ composite = "2d", up = "w", down = "s", left = "a", right = "d" },
 	{ composite = "2d", up = "up", down = "down", left = "left", right = "right" },

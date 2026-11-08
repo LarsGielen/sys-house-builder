@@ -1,7 +1,7 @@
 use bevy::{ecs::query::QueryData, picking::hover::Hovered, prelude::*};
 
 use crate::{
-	core::input::{Keymap, UiAction},
+	core::input::{Availability, InputHints, UiAction},
 	ui::theme::{colors, editor_layout, spacing, typography},
 };
 
@@ -19,6 +19,10 @@ impl Plugin for TooltipPlugin {
 
 #[derive(Component)]
 struct Tooltip;
+
+/// The shortcut part of the tooltip, a span of its own so it can be dimmed on its own.
+#[derive(Component)]
+struct TooltipShortcut;
 
 /// Text shown when the entity is hovered. The entity also needs a `Hovered` component.
 /// If it has a `UiAction`, the action's shortcut is appended.
@@ -54,6 +58,15 @@ fn spawn_tooltip(mut commands: Commands) {
 		GlobalZIndex(100),
 		Visibility::Hidden,
 		Pickable::IGNORE,
+		children![(
+			TooltipShortcut,
+			TextSpan::new(""),
+			TextFont {
+				font_size: FontSize::Px(typography::SMALL),
+				..default()
+			},
+			TextColor(colors::TEXT),
+		)],
 	));
 }
 
@@ -69,9 +82,10 @@ struct TooltipQuery {
 
 fn update_tooltip(
 	time: Res<Time>,
-	keymap: Res<Keymap>,
+	hints: InputHints,
 	targets: Query<TooltipQuery>,
 	tooltip: Single<(&mut Node, &mut Text, &mut Visibility), With<Tooltip>>,
+	shortcut_span: Single<(&mut TextSpan, &mut TextColor), With<TooltipShortcut>>,
 	mut hover: Local<HoverTimer>,
 ) {
 	let (mut node, mut text, mut visibility) = tooltip.into_inner();
@@ -100,18 +114,30 @@ fn update_tooltip(
 		return;
 	}
 
-	// Looked up on every show, so the hint follows the keymap if it ever changes at runtime.
-	let shortcut = target
+	// Looked up on every show, so the hint follows the keymap and the active contexts.
+	let hint = target
 		.ui_action
 		.and_then(|action| action.0)
-		.and_then(|name| keymap.shortcuts_for(name).next());
-	let hint_text = match shortcut {
-		Some(shortcut) => format!("{label} ({shortcut})"),
-		None => label.to_string(),
-	};
-	if text.0 != hint_text {
-		text.0 = hint_text;
+		.and_then(|name| hints.for_action(name));
+	if text.0 != label {
+		text.0 = label.to_string();
 	}
+	let (mut span, mut span_color) = shortcut_span.into_inner();
+	let (shortcut_text, color) = match hint {
+		Some(hint) => (
+			format!(" ({})", hint.shortcut),
+			match hint.availability {
+				Availability::Available => colors::TEXT,
+				// Inactive and blocked look the same for now; they are told apart in the hint.
+				Availability::ContextInactive | Availability::Blocked => colors::TEXT_FAINT,
+			},
+		),
+		None => (String::new(), colors::TEXT),
+	};
+	if span.0 != shortcut_text {
+		span.0 = shortcut_text;
+	}
+	span_color.set_if_neq(TextColor(color));
 
 	// Layout values are in physical pixels while `Node` positions are logical.
 	let computed = target.computed_node;

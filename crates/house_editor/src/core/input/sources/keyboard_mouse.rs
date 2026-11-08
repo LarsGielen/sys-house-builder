@@ -7,7 +7,11 @@ use bevy::{
 };
 
 use crate::core::input::{
-	ActionState, AxisInput, Keymap, Shortcut, ShortcutInput, modifiers::Modifiers, signal::Signal,
+	ActionState, AxisInput, ButtonBinding, Keymap, Shortcut, ShortcutInput,
+	context::{ActiveContexts, Claim, ClaimedInput},
+	interpretation::Interpretation,
+	modifiers::Modifiers,
+	signal::Signal,
 };
 
 /// Turns keyboard and mouse button shortcuts into button contributions.
@@ -15,10 +19,14 @@ use crate::core::input::{
 /// A shortcut starts only on the frame its input is pressed with exactly its modifiers. After
 /// that it stays active for as long as the input is held, whatever the modifiers do, so
 /// releasing Shift in the middle of a Shift+drag does not end the drag.
+///
+/// Contexts are the exception: a shortcut only starts while its binding is live, and it ends as
+/// soon as the binding is not, so a dialog that opens mid-drag cannot leave the drag running.
 #[derive(Default)]
 pub struct ButtonSource {
-	/// Shortcuts that started and whose input has not been released since.
-	latched: HashSet<Shortcut>,
+	/// Shortcuts that started and whose input has not been released since. The context is part of
+	/// the key because two contexts may bind the same shortcut, and only the higher one is live.
+	latched: HashSet<(&'static str, Shortcut)>,
 }
 
 impl ButtonSource {
@@ -27,18 +35,38 @@ impl ButtonSource {
 		keymap: &Keymap,
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
+		active: &ActiveContexts,
 		state: &mut ActionState,
 	) {
-		for &(shortcut, action_name) in keymap.button_bindings() {
-			if self.latched.contains(&shortcut) {
-				if !shortcut.input_held(keys, mouse_buttons) {
-					self.latched.remove(&shortcut);
-				}
-			} else if shortcut.just_pressed(keys, mouse_buttons) {
-				self.latched.insert(shortcut);
+		for &ButtonBinding {
+			shortcut,
+			action: action_name,
+			context,
+			interpretation,
+		} in keymap.button_bindings()
+		{
+			let key = (context, shortcut);
+
+			if !keymap.is_live(context, &shortcut.claim(), active) {
+				self.latched.remove(&key);
+				continue;
 			}
 
-			if !self.latched.contains(&shortcut) {
+			let mut released = false;
+			if self.latched.contains(&key) {
+				if !shortcut.input_held(keys, mouse_buttons) {
+					self.latched.remove(&key);
+					released = true;
+				}
+			} else if shortcut.just_pressed(keys, mouse_buttons) {
+				self.latched.insert(key);
+			}
+
+			let is_active = match interpretation {
+				Interpretation::Pressed => self.latched.contains(&key),
+				Interpretation::Released => released,
+			};
+			if !is_active {
 				continue;
 			}
 
@@ -65,16 +93,46 @@ pub fn poll_axis_bindings(
 	mouse_buttons: &ButtonInput<MouseButton>,
 	motion: &AccumulatedMouseMotion,
 	scroll: &AccumulatedMouseScroll,
+	active: &ActiveContexts,
 	state: &mut ActionState,
 ) {
 	let held_modifiers = Modifiers::from_keys(keys);
 	for binding in keymap.axis_bindings() {
+		// A modifier key that is a direction is not a modifier of its own composite, so holding
+		// Shift to rise does not stop the composite from matching.
+		let held_modifiers =
+			binding
+				.input
+				.directions()
+				.into_iter()
+				.fold(held_modifiers, |held, direction| match direction {
+					ShortcutInput::Modifier(modifier) => held.without(modifier),
+					ShortcutInput::Key(_) | ShortcutInput::Mouse(_) => held,
+				});
 		if binding.modifiers != held_modifiers {
 			continue;
 		}
-		let Some(signal) = axis_signal(binding.input, motion, scroll)
-			.or_else(|| composite_signal(binding.input, keys, mouse_buttons))
-		else {
+
+		// Not latched, so a binding that stops being live stops at once. A composite is judged
+		// per button: a context that takes only `w` leaves the other directions working.
+		let is_live = |claim: &Claim| keymap.is_live(binding.context, claim, active);
+		let signal = match binding.input {
+			AxisInput::MouseMotion | AxisInput::Scroll => binding
+				.claims()
+				.iter()
+				.all(is_live)
+				.then(|| axis_signal(binding.input, motion, scroll))
+				.flatten(),
+			AxisInput::Composite1D { .. } | AxisInput::Composite2D { .. } => {
+				composite_signal(binding.input, keys, mouse_buttons, |direction| {
+					is_live(&Claim {
+						input: ClaimedInput::Button(direction),
+						modifiers: binding.modifiers,
+					})
+				})
+			}
+		};
+		let Some(signal) = signal else {
 			continue;
 		};
 
@@ -120,9 +178,10 @@ fn composite_signal(
 	input: AxisInput,
 	keys: &ButtonInput<KeyCode>,
 	mouse_buttons: &ButtonInput<MouseButton>,
+	is_direction_live: impl Fn(ShortcutInput) -> bool,
 ) -> Option<Signal> {
 	let held = |direction: ShortcutInput| {
-		if direction.pressed(keys, mouse_buttons) {
+		if direction.pressed(keys, mouse_buttons) && is_direction_live(direction) {
 			1.0
 		} else {
 			0.0

@@ -22,6 +22,8 @@ struct ActionSlot {
 	signal_previous: Signal,
 	contributions: Vec<(SourceId, Signal)>,
 	owner: Option<SourceId>,
+	toggled: bool,     // The value of a toggle, which the slot keeps between frames.
+	was_pressed: bool, // Whether a toggle was pressed last frame, so that holding the key flips it once.
 }
 
 #[derive(Debug)]
@@ -45,6 +47,8 @@ impl ActionState {
 				signal_previous: action.value().default_signal(),
 				contributions: Vec::new(),
 				owner: None,
+				toggled: false,
+				was_pressed: false,
 			},
 		);
 	}
@@ -123,6 +127,18 @@ impl ActionState {
 						.iter()
 						.any(|(_, signal)| matches!(signal, Signal::Button(true))),
 				),
+				ValueKind::Toggle => {
+					let pressed = slot
+						.contributions
+						.iter()
+						.any(|(_, signal)| matches!(signal, Signal::Button(true)));
+					// Flips on the press, whichever sources press it, and not again while held.
+					if pressed && !slot.was_pressed {
+						slot.toggled = !slot.toggled;
+					}
+					slot.was_pressed = pressed;
+					Signal::Button(slot.toggled)
+				}
 				ValueKind::Axis1D(mode) => {
 					let mut values = HashMap::<SourceId, f32>::new();
 					let mut limits = HashMap::<SourceId, f32>::new();
@@ -206,6 +222,24 @@ impl ActionState {
 				Signal::Button(true)
 			)
 		)
+	}
+
+	/// Whether a toggle is on. False for anything that is not a toggle.
+	pub fn toggled(&self, action: impl Action) -> bool {
+		self.toggled_named(action.name())
+	}
+
+	pub fn toggled_named(&self, name: &str) -> bool {
+		self.slots
+			.get(name)
+			.is_some_and(|slot| slot.value_kind == ValueKind::Toggle && slot.toggled)
+	}
+
+	/// Whether a toggle changed since the last frame began.
+	pub fn just_toggled(&self, action: impl Action) -> bool {
+		self.slots.get(action.name()).is_some_and(|slot| {
+			slot.value_kind == ValueKind::Toggle && slot.signal != slot.signal_previous
+		})
 	}
 
 	pub fn axis1d(&self, action: impl Action) -> f32 {

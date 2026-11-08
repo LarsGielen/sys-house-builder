@@ -9,6 +9,7 @@ pub enum AxisMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueKind {
 	Button,
+	Toggle,
 	Axis1D(AxisMode),
 	Axis2D(AxisMode),
 }
@@ -23,7 +24,7 @@ pub enum Signal {
 impl ValueKind {
 	pub fn default_signal(self) -> Signal {
 		match self {
-			ValueKind::Button => Signal::Button(false),
+			ValueKind::Button | ValueKind::Toggle => Signal::Button(false),
 			ValueKind::Axis1D(_) => Signal::Axis1D(0.0),
 			ValueKind::Axis2D(_) => Signal::Axis2D(Vec2::ZERO),
 		}
@@ -32,7 +33,7 @@ impl ValueKind {
 	pub fn accepts(self, signal: Signal) -> bool {
 		matches!(
 			(self, signal),
-			(ValueKind::Button, Signal::Button(_))
+			(ValueKind::Button | ValueKind::Toggle, Signal::Button(_))
 				| (ValueKind::Axis1D(_), Signal::Axis1D(_))
 				| (ValueKind::Axis2D(_), Signal::Axis2D(_))
 		)

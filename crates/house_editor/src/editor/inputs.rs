@@ -16,6 +16,8 @@ pub enum EditorAction {
 	Redo,
 	Save,
 	Open,
+	/// A toggle, so one value is shared by its shortcut and the widget that shows it.
+	ToggleSnap,
 }
 
 impl Action for EditorAction {
@@ -26,29 +28,44 @@ impl Action for EditorAction {
 			EditorAction::Redo => "editor.redo",
 			EditorAction::Save => "editor.save",
 			EditorAction::Open => "editor.open",
+			EditorAction::ToggleSnap => "editor.toggle_snap",
 		}
 	}
 
 	fn value(self) -> ValueKind {
-		ValueKind::Button
+		match self {
+			EditorAction::ToggleSnap => ValueKind::Toggle,
+			_ => ValueKind::Button,
+		}
 	}
 }
 
 impl ActionGroup for EditorAction {
 	fn all() -> &'static [Self] {
-		&[Self::Undo, Self::Redo, Self::Save, Self::Open]
+		&[
+			Self::Undo,
+			Self::Redo,
+			Self::Save,
+			Self::Open,
+			Self::ToggleSnap,
+		]
 	}
 }
 
 pub fn handle_editor_actions(state: Res<ActionState>) {
 	for &action in EditorAction::all() {
-		if state.just_pressed(action) {
-			match action {
-				EditorAction::Undo => info!("test: Undo"),
-				EditorAction::Redo => info!("test: Redo"),
-				EditorAction::Save => info!("test: Save"),
-				EditorAction::Open => info!("test: Open"),
+		match action {
+			EditorAction::Undo if state.just_pressed(action) => info!("test: Undo"),
+			EditorAction::Redo if state.just_pressed(action) => info!("test: Redo"),
+			EditorAction::Save if state.just_pressed(action) => info!("test: Save"),
+			EditorAction::Open if state.just_pressed(action) => info!("test: Open"),
+			EditorAction::ToggleSnap if state.just_toggled(action) => {
+				info!(
+					"test: Snap {}",
+					if state.toggled(action) { "on" } else { "off" }
+				)
 			}
+			_ => {}
 		}
 	}
 }

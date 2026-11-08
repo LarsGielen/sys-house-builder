@@ -44,7 +44,9 @@ fn app_with_devices() -> App {
 		.init_resource::<AccumulatedMouseMotion>()
 		.init_resource::<AccumulatedMouseScroll>()
 		.add_plugins(InputPlugin)
-		.add_input_actions::<TestAction>();
+		.add_input_actions::<TestAction>()
+		.add_input_context(InputContext::new("global"));
+	app.world_mut().spawn(InputContextRef("global"));
 	app
 }
 
@@ -56,8 +58,9 @@ fn run_input_frame(app: &mut App) {
 fn a_pressed_key_reaches_the_action_state_through_the_schedule() {
 	let mut app = app_with_devices();
 	let keymap = Keymap::parse(
-		"[bindings]\n\"test.jump\" = [\"space\"]",
+		"[contexts.global.bindings]\n\"test.jump\" = [\"space\"]",
 		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
 	)
 	.unwrap();
 	app.insert_resource(keymap);
@@ -103,11 +106,16 @@ fn frames_without_a_keymap_are_skipped_instead_of_panicking() {
 }
 
 const AXIS_KEYMAP: &str =
-	"[bindings]\n\"test.look\" = [\"mouse_motion\"]\n\"test.zoom\" = [\"scroll\"]";
+	"[contexts.global.bindings]\n\"test.look\" = [\"mouse_motion\"]\n\"test.zoom\" = [\"scroll\"]";
 
 fn app_with_axis_keymap() -> App {
 	let mut app = app_with_devices();
-	let keymap = Keymap::parse(AXIS_KEYMAP, app.world().resource::<ActionState>()).unwrap();
+	let keymap = Keymap::parse(
+		AXIS_KEYMAP,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
 	app.insert_resource(keymap);
 	app
 }
@@ -170,8 +178,13 @@ fn scroll_reaches_the_action_state_for_one_frame() {
 #[test]
 fn a_binding_scale_is_applied_before_the_value_reaches_the_action_state() {
 	let mut app = app_with_devices();
-	let text = "[bindings]\n\"test.look\" = [{ input = \"mouse_motion\", scale = [0.5, -1.0] }]\n\"test.zoom\" = [{ input = \"scroll\", scale = -1.0 }]";
-	let keymap = Keymap::parse(text, app.world().resource::<ActionState>()).unwrap();
+	let text = "[contexts.global.bindings]\n\"test.look\" = [{ input = \"mouse_motion\", scale = [0.5, -1.0] }]\n\"test.zoom\" = [{ input = \"scroll\", scale = -1.0 }]";
+	let keymap = Keymap::parse(
+		text,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
 	app.insert_resource(keymap);
 
 	app.world_mut()
@@ -190,8 +203,13 @@ fn a_binding_scale_is_applied_before_the_value_reaches_the_action_state() {
 #[test]
 fn an_axis_binding_fires_only_with_exactly_its_modifiers() {
 	let mut app = app_with_devices();
-	let text = "[bindings]\n\"test.zoom\" = [\"scroll\"]\n\"test.look\" = [\"shift+mouse_motion\"]";
-	let keymap = Keymap::parse(text, app.world().resource::<ActionState>()).unwrap();
+	let text = "[contexts.global.bindings]\n\"test.zoom\" = [\"scroll\"]\n\"test.look\" = [\"shift+mouse_motion\"]";
+	let keymap = Keymap::parse(
+		text,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
 	app.insert_resource(keymap);
 	let scroll = Vec2::new(0.0, 2.0);
 	let motion = Vec2::new(3.0, 1.0);
@@ -226,13 +244,18 @@ fn an_axis_binding_fires_only_with_exactly_its_modifiers() {
 	assert_eq!(state.axis2d(TestAction::Look), Vec2::ZERO);
 }
 
-const COMPOSITE_KEYMAP: &str = r#"[bindings]
+const COMPOSITE_KEYMAP: &str = r#"[contexts.global.bindings]
 "test.move" = [{ composite = "2d", up = "w", down = "s", left = "a", right = "d" }]
 "test.rise" = [{ composite = "1d", up = "mouse_left", down = "c", scale = 3.0 }]"#;
 
 fn app_with_composite_keymap() -> App {
 	let mut app = app_with_devices();
-	let keymap = Keymap::parse(COMPOSITE_KEYMAP, app.world().resource::<ActionState>()).unwrap();
+	let keymap = Keymap::parse(
+		COMPOSITE_KEYMAP,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
 	app.insert_resource(keymap);
 	app
 }
@@ -318,5 +341,116 @@ fn a_composite_does_not_move_while_a_modifier_is_held() {
 			.resource::<ActionState>()
 			.axis2d(TestAction::Move),
 		Vec2::ZERO
+	);
+}
+
+// ## Contexts ## //
+
+#[test]
+fn a_binding_acts_only_while_an_entity_of_its_context_exists() {
+	let mut app = app_with_devices();
+	app.add_input_context(InputContext::new("viewport").priority(10));
+	let text = "[contexts.viewport.bindings]\n\"test.look\" = [\"mouse_motion\"]";
+	let keymap = Keymap::parse(
+		text,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
+	app.insert_resource(keymap);
+	let look = |app: &App| {
+		app.world()
+			.resource::<ActionState>()
+			.axis2d(TestAction::Look)
+	};
+	let move_mouse = |app: &mut App| {
+		app.world_mut()
+			.resource_mut::<AccumulatedMouseMotion>()
+			.delta = Vec2::new(3.0, 0.0);
+	};
+
+	move_mouse(&mut app);
+	run_input_frame(&mut app);
+	assert_eq!(look(&app), Vec2::ZERO);
+
+	let viewport = app.world_mut().spawn(InputContextRef("viewport")).id();
+	move_mouse(&mut app);
+	run_input_frame(&mut app);
+	assert_eq!(look(&app), Vec2::new(3.0, 0.0));
+
+	app.world_mut().despawn(viewport);
+	move_mouse(&mut app);
+	run_input_frame(&mut app);
+	assert_eq!(look(&app), Vec2::ZERO);
+}
+
+#[test]
+fn a_higher_context_takes_a_composite_button_only_for_that_button() {
+	let mut app = app_with_devices();
+	app.add_input_context(InputContext::new("viewport").priority(10));
+	let text = "[contexts.global.bindings]\n\"test.jump\" = [\"w\"]\n\
+		[contexts.viewport.bindings]\n\"test.move\" = [{ composite = \"2d\", up = \"w\", down = \"s\", left = \"a\", right = \"d\" }]";
+	let keymap = Keymap::parse(
+		text,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
+	app.insert_resource(keymap);
+	app.world_mut().spawn(InputContextRef("viewport"));
+
+	{
+		let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+		keys.press(KeyCode::KeyW);
+		keys.press(KeyCode::KeyD);
+	}
+	run_input_frame(&mut app);
+
+	// The viewport binds W, so the global shortcut on W stays quiet, while the composite works.
+	let state = app.world().resource::<ActionState>();
+	assert!(!state.pressed(TestAction::Jump));
+	assert!(state.axis2d(TestAction::Move).length() > 0.99);
+}
+
+#[test]
+fn modifier_keys_drive_a_composite_without_blocking_their_own_binding() {
+	let mut app = app_with_devices();
+	let text = "[contexts.global.bindings]\n\"test.rise\" = [{ composite = \"1d\", up = \"shift\", down = \"ctrl\" }]";
+	let keymap = Keymap::parse(
+		text,
+		app.world().resource::<ActionState>(),
+		app.world().resource::<InputContexts>(),
+	)
+	.unwrap();
+	app.insert_resource(keymap);
+	let rise = |app: &App| {
+		app.world()
+			.resource::<ActionState>()
+			.axis1d(TestAction::Rise)
+	};
+
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::ShiftLeft);
+	run_input_frame(&mut app);
+	assert_eq!(rise(&app), 1.0);
+
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::ControlRight);
+	run_input_frame(&mut app);
+	assert_eq!(rise(&app), 0.0, "shift and ctrl cancel");
+
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.release(KeyCode::ControlRight);
+	app.world_mut()
+		.resource_mut::<ButtonInput<KeyCode>>()
+		.press(KeyCode::AltLeft);
+	run_input_frame(&mut app);
+	assert_eq!(
+		rise(&app),
+		0.0,
+		"alt is a modifier the composite does not take"
 	);
 }

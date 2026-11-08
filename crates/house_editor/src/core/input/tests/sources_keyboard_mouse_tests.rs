@@ -1,5 +1,8 @@
 use super::*;
-use crate::core::input::{Action, ActionGroup, ValueKind};
+use crate::core::input::{
+	Action, ActionGroup, Block, InputContext, InputContexts, Modifier, ValueKind,
+	context::ActiveContexts,
+};
 
 #[derive(Clone, Copy)]
 enum TestAction {
@@ -28,7 +31,15 @@ impl ActionGroup for TestAction {
 	}
 }
 
-const KEYMAP: &str = "[bindings]\n\"test.orbit\" = [\"mouse_middle\"]\n\"test.pan\" = [\"shift+mouse_middle\"]\n\"test.undo\" = [\"ctrl+z\", \"ctrl+y\"]";
+const KEYMAP: &str = "[contexts.global.bindings]\n\"test.orbit\" = [\"mouse_middle\"]\n\"test.pan\" = [\"shift+mouse_middle\"]\n\"test.undo\" = [\"ctrl+z\", \"ctrl+y\"]";
+
+fn global() -> InputContext {
+	InputContext::new("global").priority(0)
+}
+
+fn viewport() -> InputContext {
+	InputContext::new("viewport").priority(10)
+}
 
 /// One simulated app: the devices, the source and the action state it feeds.
 struct Frames {
@@ -37,18 +48,30 @@ struct Frames {
 	keymap: Keymap,
 	source: ButtonSource,
 	state: ActionState,
+	active: ActiveContexts,
 }
 
 impl Frames {
 	fn new() -> Self {
+		Self::with_keymap(KEYMAP, &[global()], &[global()])
+	}
+
+	/// `registered` are the contexts the keymap may name, `active` the ones on the stack.
+	fn with_keymap(keymap: &str, registered: &[InputContext], active: &[InputContext]) -> Self {
 		let mut state = ActionState::default();
 		state.register_group::<TestAction>();
+		let mut contexts = InputContexts::default();
+		for context in registered {
+			contexts.register(context.clone()).unwrap();
+		}
+		let active = ActiveContexts::new(active.to_vec());
 		Self {
 			keys: ButtonInput::default(),
 			mouse_buttons: ButtonInput::default(),
-			keymap: Keymap::parse(KEYMAP, &state).unwrap(),
+			keymap: Keymap::parse(keymap, &state, &contexts).unwrap(),
 			source: ButtonSource::default(),
 			state,
+			active,
 		}
 	}
 
@@ -60,6 +83,7 @@ impl Frames {
 			&self.keymap,
 			&self.keys,
 			&self.mouse_buttons,
+			&self.active,
 			&mut self.state,
 		);
 		self.state.resolve();
@@ -251,7 +275,7 @@ fn composite_with(input: AxisInput, keys: &[KeyCode], buttons: &[MouseButton]) -
 	let mut mouse_input = ButtonInput::<MouseButton>::default();
 	keys.iter().for_each(|&key| key_input.press(key));
 	buttons.iter().for_each(|&button| mouse_input.press(button));
-	composite_signal(input, &key_input, &mouse_input)
+	composite_signal(input, &key_input, &mouse_input, |_| true)
 }
 
 #[test]
@@ -327,4 +351,177 @@ fn the_mouse_signals_ignore_composites_and_the_other_way_round() {
 		composite_with(AxisInput::MouseMotion, &[KeyCode::KeyW], &[]),
 		None
 	);
+}
+
+// ## Contexts ## //
+
+const TWO_CONTEXTS: &str = "[contexts.global.bindings]\n\"test.undo\" = [\"ctrl+z\"]\n\"test.pan\" = [\"mouse_middle\"]\n\
+	[contexts.viewport.bindings]\n\"test.orbit\" = [\"mouse_middle\"]";
+
+#[test]
+fn a_shortcut_of_an_inactive_context_does_nothing() {
+	let mut frames = Frames::with_keymap(TWO_CONTEXTS, &[global(), viewport()], &[global()]);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+
+	assert!(!frames.state.pressed(TestAction::Orbit));
+	assert!(frames.state.pressed(TestAction::Pan));
+}
+
+#[test]
+fn a_higher_context_takes_the_shortcut_it_binds() {
+	let mut frames = Frames::with_keymap(
+		TWO_CONTEXTS,
+		&[global(), viewport()],
+		&[global(), viewport()],
+	);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+
+	assert!(frames.state.pressed(TestAction::Orbit));
+	assert!(!frames.state.pressed(TestAction::Pan));
+}
+
+#[test]
+fn a_held_shortcut_ends_when_its_context_goes_away() {
+	let mut frames = Frames::with_keymap(
+		TWO_CONTEXTS,
+		&[global(), viewport()],
+		&[global(), viewport()],
+	);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+	frames.next();
+	assert!(frames.state.pressed(TestAction::Orbit));
+
+	// The button is still held, but the viewport is gone: the drag must not keep running, and
+	// the lower binding must not start from a button that was pressed earlier.
+	frames.active = ActiveContexts::new(vec![global()]);
+	frames.next();
+
+	assert!(!frames.state.pressed(TestAction::Orbit));
+	assert!(!frames.state.pressed(TestAction::Pan));
+}
+
+#[test]
+fn a_context_that_appears_while_a_button_is_held_does_not_start_its_shortcut() {
+	let mut frames = Frames::with_keymap(TWO_CONTEXTS, &[global(), viewport()], &[global()]);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+	frames.active = ActiveContexts::new(vec![global(), viewport()]);
+	frames.next();
+
+	assert!(!frames.state.pressed(TestAction::Orbit));
+}
+
+#[test]
+fn a_blocking_context_swallows_the_shortcuts_below_it() {
+	let text_field = InputContext::new("text")
+		.priority(20)
+		.block(Block::Modifier(Modifier::Ctrl));
+	let mut frames = Frames::with_keymap(
+		TWO_CONTEXTS,
+		&[global(), viewport(), text_field.clone()],
+		&[global(), text_field],
+	);
+	frames.keys.press(KeyCode::ControlLeft);
+	frames.keys.press(KeyCode::KeyZ);
+	frames.next();
+
+	assert!(!frames.state.pressed(TestAction::Undo));
+}
+
+// ## Modifier keys as inputs ## //
+
+#[test]
+fn a_modifier_key_can_be_a_shortcut() {
+	let keymap = "[contexts.global.bindings]\n\"test.orbit\" = [\"shift\"]\n\"test.undo\" = [\"ctrl+shift\"]";
+	let mut frames = Frames::with_keymap(keymap, &[global()], &[global()]);
+	frames.keys.press(KeyCode::ShiftLeft);
+	frames.next();
+
+	assert!(frames.state.just_pressed(TestAction::Orbit));
+	assert!(!frames.state.pressed(TestAction::Undo));
+
+	// Held, it stays pressed, and releasing the key ends it.
+	frames.next();
+	assert!(frames.state.pressed(TestAction::Orbit));
+	frames.keys.release(KeyCode::ShiftLeft);
+	frames.next();
+	assert!(!frames.state.pressed(TestAction::Orbit));
+}
+
+#[test]
+fn a_modifier_shortcut_needs_the_modifiers_it_names() {
+	let keymap = "[contexts.global.bindings]\n\"test.orbit\" = [\"shift\"]\n\"test.undo\" = [\"ctrl+shift\"]";
+	let mut frames = Frames::with_keymap(keymap, &[global()], &[global()]);
+	frames.keys.press(KeyCode::ControlLeft);
+	frames.next();
+	frames.keys.press(KeyCode::ShiftLeft);
+	frames.next();
+
+	assert!(frames.state.pressed(TestAction::Undo));
+	assert!(!frames.state.pressed(TestAction::Orbit));
+}
+
+// ## Interpretation ## //
+
+const RELEASED: &str = "[contexts.global.bindings]\n\"test.orbit\" = [{ input = \"mouse_middle\", interpret = \"released\" }]\n\"test.undo\" = [{ input = \"ctrl+z\", interpret = \"released\" }]";
+
+#[test]
+fn a_released_shortcut_is_active_for_one_frame_when_the_input_is_released() {
+	let mut frames = Frames::with_keymap(RELEASED, &[global()], &[global()]);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+	assert!(
+		!frames.state.pressed(TestAction::Orbit),
+		"nothing on the press"
+	);
+
+	frames.next();
+	assert!(
+		!frames.state.pressed(TestAction::Orbit),
+		"nothing while held"
+	);
+
+	frames.mouse_buttons.release(MouseButton::Middle);
+	frames.next();
+	assert!(frames.state.pressed(TestAction::Orbit));
+	assert!(frames.state.just_pressed(TestAction::Orbit));
+
+	frames.next();
+	assert!(
+		!frames.state.pressed(TestAction::Orbit),
+		"only for one frame"
+	);
+}
+
+#[test]
+fn a_released_shortcut_fires_even_if_a_modifier_is_let_go_first() {
+	let mut frames = Frames::with_keymap(RELEASED, &[global()], &[global()]);
+	frames.keys.press(KeyCode::ControlLeft);
+	frames.keys.press(KeyCode::KeyZ);
+	frames.next();
+	frames.keys.release(KeyCode::ControlLeft);
+	frames.next();
+	assert!(!frames.state.pressed(TestAction::Undo));
+
+	frames.keys.release(KeyCode::KeyZ);
+	frames.next();
+	assert!(frames.state.pressed(TestAction::Undo));
+}
+
+#[test]
+fn a_released_shortcut_that_loses_its_context_is_cancelled() {
+	let mut frames = Frames::with_keymap(RELEASED, &[global()], &[global()]);
+	frames.mouse_buttons.press(MouseButton::Middle);
+	frames.next();
+
+	frames.active = ActiveContexts::new(vec![]);
+	frames.next();
+	frames.active = ActiveContexts::new(vec![global()]);
+	frames.mouse_buttons.release(MouseButton::Middle);
+	frames.next();
+
+	assert!(!frames.state.pressed(TestAction::Orbit));
 }

@@ -2,10 +2,12 @@ use bevy::prelude::*;
 
 mod buttons;
 mod general;
+mod toggle;
 mod tooltip;
 
 pub use buttons::{ButtonOptions, icon_button};
 pub use general::separator_vertical;
+pub use toggle::toggle;
 
 pub struct WidgetsPlugin;
 

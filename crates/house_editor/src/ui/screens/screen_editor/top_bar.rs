@@ -6,7 +6,7 @@ use crate::{
 	ui::{
 		icons::{Icon, Icons},
 		theme::{colors, editor_layout, spacing},
-		widgets::{ButtonOptions, icon_button, separator_vertical},
+		widgets::{ButtonOptions, icon_button, separator_vertical, toggle},
 	},
 };
 
@@ -37,6 +37,10 @@ pub(super) fn top_bar(icons: &Icons) -> impl Scene + use<> {
 			@icon_button(EditorAction::Save, icons.get(Icon::Save), size, ButtonOptions { hint: Some("Save"), ..default() })
 			--
 			@icon_button(EditorAction::Open, icons.get(Icon::Open), size, ButtonOptions { hint: Some("Open"), ..default() })
+			--
+			@separator_vertical()
+			--
+			@toggle(EditorAction::ToggleSnap, "Snap", ButtonOptions { hint: Some("Snap to grid"), ..default() })
 		]
 	}
 }

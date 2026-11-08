@@ -9,7 +9,7 @@ use bevy::{
 };
 
 use crate::{
-	core::input::{UiAction, UiActivated},
+	core::input::{ActionState, UiAction, UiActivated},
 	ui::{
 		theme::{colors, editor_layout},
 		widgets::tooltip::TooltipText,
@@ -102,6 +102,7 @@ pub fn run_action_on_activate(
 struct ButtonQuery {
 	entity: Entity,
 	style: &'static ButtonStyle,
+	action: Option<&'static UiAction>,
 	hovered: &'static Hovered,
 	pressed: Has<Pressed>,
 	background: &'static mut BackgroundColor,
@@ -109,12 +110,17 @@ struct ButtonQuery {
 }
 
 fn update_buttons(
+	state: Res<ActionState>,
 	focus: Res<InputFocus>,
 	focus_visible: Res<InputFocusVisible>,
 	mut buttons: Query<ButtonQuery>,
 ) {
 	for mut button in &mut buttons {
-		let selected = false;
+		// A button for a toggle shows the toggle's value, whoever flipped it.
+		let selected = button
+			.action
+			.and_then(|action| action.0)
+			.is_some_and(|name| state.toggled_named(name));
 		let (fill, ring) = resolve_button_style(
 			*button.style,
 			selected,
