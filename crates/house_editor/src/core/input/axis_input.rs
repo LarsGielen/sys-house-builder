@@ -12,7 +12,7 @@ use crate::core::input::{
 /// The mouse inputs are relative: they report what changed this frame. A composite turns buttons
 /// into an absolute axis: it reports which directions are held right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AxisInput {
+pub(crate) enum AxisInput {
 	MouseMotion,
 	Scroll,
 	Composite1D {
@@ -178,7 +178,7 @@ impl fmt::Display for AxisInput {
 /// Negative values invert, so there is no separate invert option.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(untagged)]
-pub enum Scale {
+pub(crate) enum Scale {
 	One(f32),
 	Two([f32; 2]),
 }

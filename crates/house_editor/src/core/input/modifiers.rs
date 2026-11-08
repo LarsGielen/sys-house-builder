@@ -11,7 +11,7 @@ pub enum Modifier {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
-pub struct ModifierSet {
+pub(crate) struct ModifierSet {
 	pub ctrl: bool,
 	pub shift: bool,
 	pub alt: bool,

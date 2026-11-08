@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use bevy::{log::warn_once, prelude::*};
 
-use crate::core::input::Shortcut;
+use crate::core::input::ButtonCombo;
 
 mod block;
 mod claim;
@@ -17,7 +17,7 @@ pub struct InputContext {
 	name: &'static str,
 	priority: i32,
 	block: Vec<Block>,
-	pass: Vec<Shortcut>,
+	pass: Vec<ButtonCombo>,
 }
 
 impl InputContext {
@@ -42,8 +42,8 @@ impl InputContext {
 	}
 
 	/// Lets exactly this shortcut through to the contexts below, even if a block rule matches it.
-	pub fn pass(mut self, shortcut: Shortcut) -> Self {
-		self.pass.push(shortcut);
+	pub fn pass(mut self, button_combo: ButtonCombo) -> Self {
+		self.pass.push(button_combo);
 		self
 	}
 
@@ -52,7 +52,9 @@ impl InputContext {
 	}
 
 	fn passes(&self, claim: &Claim) -> bool {
-		self.pass.iter().any(|shortcut| shortcut.claim() == *claim)
+		self.pass
+			.iter()
+			.any(|button_combo| button_combo.claim() == *claim)
 	}
 
 	fn blocks(&self, claim: &Claim) -> bool {
@@ -69,7 +71,7 @@ pub struct InputContexts {
 
 impl InputContexts {
 	/// Names and priorities must be unique, so the order of the stack is never a guess.
-	pub fn register(&mut self, context: InputContext) -> Result<(), String> {
+	pub(crate) fn register(&mut self, context: InputContext) -> Result<(), String> {
 		if let Some(other) = self
 			.contexts
 			.iter()
@@ -91,7 +93,7 @@ impl InputContexts {
 		Ok(())
 	}
 
-	pub fn get(&self, name: &str) -> Option<&InputContext> {
+	pub(crate) fn get(&self, name: &str) -> Option<&InputContext> {
 		self.contexts.iter().find(|context| context.name == name)
 	}
 
@@ -108,7 +110,7 @@ pub struct InputContextRef(pub &'static str);
 
 /// The contexts that have an entity right now, from the highest priority to the lowest.
 #[derive(Resource, Default)]
-pub struct ActiveContexts {
+pub(crate) struct ActiveContexts {
 	contexts: Vec<InputContext>,
 }
 
@@ -399,7 +401,7 @@ mod tests {
 		let context = InputContext::new("modal")
 			.priority(20)
 			.block(Block::Modifier(Modifier::Ctrl))
-			.pass(Shortcut::ctrl(KeyCode::KeyS));
+			.pass(ButtonCombo::ctrl(KeyCode::KeyS));
 		let stack = active(vec![global(), context]);
 
 		assert!(stack.is_live("global", &ctrl(KeyCode::KeyS), no_bindings));
@@ -410,7 +412,7 @@ mod tests {
 	fn a_binding_of_a_higher_context_wins_over_a_pass_rule() {
 		let context = InputContext::new("modal")
 			.priority(20)
-			.pass(Shortcut::ctrl(KeyCode::KeyS));
+			.pass(ButtonCombo::ctrl(KeyCode::KeyS));
 		let stack = active(vec![global(), context]);
 		let modal_binds_save =
 			|context: &str, claim: &Claim| context == "modal" && *claim == ctrl(KeyCode::KeyS);

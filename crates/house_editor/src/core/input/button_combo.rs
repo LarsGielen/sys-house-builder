@@ -10,7 +10,7 @@ use crate::core::input::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PhysicalButton {
+pub(crate) enum PhysicalButton {
 	Key(KeyCode),
 	Mouse(MouseButton),
 	Modifier(Modifier),
@@ -96,12 +96,12 @@ impl PhysicalButton {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Shortcut {
+pub struct ButtonCombo {
 	input: PhysicalButton,
 	modifiers: ModifierSet,
 }
 
-impl Shortcut {
+impl ButtonCombo {
 	/// `ctrl+<key>`, for rules in code such as a context that lets Ctrl+S through.
 	pub fn ctrl(key: KeyCode) -> Self {
 		Self {
@@ -151,7 +151,7 @@ impl Shortcut {
 }
 
 /// Formats for display to the user, such as `Ctrl+Shift+Z`.
-impl fmt::Display for Shortcut {
+impl fmt::Display for ButtonCombo {
 	fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		write!(formatter, "{}", self.modifiers)?;
 
@@ -174,7 +174,7 @@ impl fmt::Display for Shortcut {
 	}
 }
 
-impl FromStr for Shortcut {
+impl FromStr for ButtonCombo {
 	type Err = String;
 
 	/// Parses text such as `ctrl+shift+z`: modifiers first, the key last, case-insensitive.
@@ -200,7 +200,7 @@ impl FromStr for Shortcut {
 			));
 		}
 
-		Ok(Shortcut { input, modifiers })
+		Ok(ButtonCombo { input, modifiers })
 	}
 }
 
@@ -211,46 +211,53 @@ mod tests {
 
 	#[test]
 	fn shortcut_parsing_is_case_insensitive_and_checks_modifiers() {
-		let shortcut: Shortcut = "Ctrl+Shift+Z".parse().unwrap();
-		assert_eq!(shortcut.input, PhysicalButton::Key(KeyCode::KeyZ));
-		assert!(shortcut.modifiers.ctrl && shortcut.modifiers.shift && !shortcut.modifiers.alt);
+		let button_combo: ButtonCombo = "Ctrl+Shift+Z".parse().unwrap();
+		assert_eq!(button_combo.input, PhysicalButton::Key(KeyCode::KeyZ));
+		assert!(
+			button_combo.modifiers.ctrl
+				&& button_combo.modifiers.shift
+				&& !button_combo.modifiers.alt
+		);
 
-		assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
-		assert!("meta+z".parse::<Shortcut>().is_err());
-		assert!("ctrl+".parse::<Shortcut>().is_err());
+		assert!("ctrl+ctrl+z".parse::<ButtonCombo>().is_err());
+		assert!("meta+z".parse::<ButtonCombo>().is_err());
+		assert!("ctrl+".parse::<ButtonCombo>().is_err());
 	}
 
 	#[test]
 	fn displays_shortcuts_for_the_user() {
-		let shortcut: Shortcut = "ctrl+shift+z".parse().unwrap();
-		assert_eq!(shortcut.to_string(), "Ctrl+Shift+Z");
+		let button_combo: ButtonCombo = "ctrl+shift+z".parse().unwrap();
+		assert_eq!(button_combo.to_string(), "Ctrl+Shift+Z");
 
-		let shortcut: Shortcut = "f5".parse().unwrap();
-		assert_eq!(shortcut.to_string(), "F5");
+		let button_combo: ButtonCombo = "f5".parse().unwrap();
+		assert_eq!(button_combo.to_string(), "F5");
 	}
 
 	#[test]
 	fn parses_mouse_buttons_without_confusing_them_with_arrow_keys() {
-		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
-		assert_eq!(shortcut.input, PhysicalButton::Mouse(MouseButton::Middle));
-		assert!(shortcut.modifiers.shift);
+		let button_combo: ButtonCombo = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(
+			button_combo.input,
+			PhysicalButton::Mouse(MouseButton::Middle)
+		);
+		assert!(button_combo.modifiers.shift);
 
-		let arrow: Shortcut = "ctrl+left".parse().unwrap();
+		let arrow: ButtonCombo = "ctrl+left".parse().unwrap();
 		assert_eq!(arrow.input, PhysicalButton::Key(KeyCode::ArrowLeft));
 
-		assert!("mouse_back".parse::<Shortcut>().is_err());
+		assert!("mouse_back".parse::<ButtonCombo>().is_err());
 	}
 
 	#[test]
 	fn displays_mouse_shortcuts_for_the_user() {
-		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
-		assert_eq!(shortcut.to_string(), "Shift+Mouse middle");
+		let button_combo: ButtonCombo = "shift+mouse_middle".parse().unwrap();
+		assert_eq!(button_combo.to_string(), "Shift+Mouse middle");
 	}
 
 	#[test]
 	fn mouse_shortcut_requires_exact_modifiers_when_pressed() {
-		let orbit: Shortcut = "mouse_middle".parse().unwrap();
-		let pan: Shortcut = "shift+mouse_middle".parse().unwrap();
+		let orbit: ButtonCombo = "mouse_middle".parse().unwrap();
+		let pan: ButtonCombo = "shift+mouse_middle".parse().unwrap();
 
 		let mut keys = ButtonInput::<KeyCode>::default();
 		let mut mouse_buttons = ButtonInput::<MouseButton>::default();
@@ -263,12 +270,12 @@ mod tests {
 
 	#[test]
 	fn a_modifier_key_is_a_shortcut_input() {
-		let shift: Shortcut = "shift".parse().unwrap();
+		let shift: ButtonCombo = "shift".parse().unwrap();
 		assert_eq!(shift.input, PhysicalButton::Modifier(Modifier::Shift));
 		assert_eq!(shift.modifiers, ModifierSet::default());
 		assert_eq!(shift.to_string(), "Shift");
 
-		let both: Shortcut = "ctrl+shift".parse().unwrap();
+		let both: ButtonCombo = "ctrl+shift".parse().unwrap();
 		assert_eq!(both.input, PhysicalButton::Modifier(Modifier::Shift));
 		assert!(both.modifiers.ctrl && !both.modifiers.shift);
 		assert_eq!(both.to_string(), "Ctrl+Shift");
@@ -276,16 +283,16 @@ mod tests {
 
 	#[test]
 	fn a_modifier_key_cannot_be_its_own_modifier() {
-		assert!("shift+shift".parse::<Shortcut>().is_err());
-		assert!("ctrl+shift+ctrl".parse::<Shortcut>().is_err());
+		assert!("shift+shift".parse::<ButtonCombo>().is_err());
+		assert!("ctrl+shift+ctrl".parse::<ButtonCombo>().is_err());
 	}
 
 	#[test]
 	fn a_modifier_shortcut_needs_only_the_other_modifiers() {
 		let mut keys = ButtonInput::<KeyCode>::default();
 		let mouse = ButtonInput::<MouseButton>::default();
-		let shift: Shortcut = "shift".parse().unwrap();
-		let ctrl_shift: Shortcut = "ctrl+shift".parse().unwrap();
+		let shift: ButtonCombo = "shift".parse().unwrap();
+		let ctrl_shift: ButtonCombo = "ctrl+shift".parse().unwrap();
 
 		// Either shift key counts, and Shift itself is not an extra modifier.
 		keys.press(KeyCode::ShiftRight);

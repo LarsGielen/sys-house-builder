@@ -19,7 +19,7 @@ struct ActionSlot {
 }
 
 #[derive(Debug)]
-pub enum ContributionError {
+pub(crate) enum ContributionError {
 	Unregistered,
 	WrongKind,
 }
@@ -30,7 +30,7 @@ pub struct ActionState {
 }
 
 impl ActionState {
-	pub fn register(&mut self, action: impl Action) {
+	pub(crate) fn register(&mut self, action: impl Action) {
 		self.slots.insert(
 			action.name(),
 			ActionSlot {
@@ -45,29 +45,29 @@ impl ActionState {
 		);
 	}
 
-	pub fn register_group<Group: ActionGroup>(&mut self) {
+	pub(crate) fn register_group<Group: ActionGroup>(&mut self) {
 		for &action in Group::all() {
 			self.register(action);
 		}
 	}
 
 	/// The registered name equal to `name`, as the `'static` string that identifies the action.
-	pub fn registered_name(&self, name: &str) -> Option<&'static str> {
+	pub(crate) fn registered_name(&self, name: &str) -> Option<&'static str> {
 		self.slots.get_key_value(name).map(|(name, _)| *name)
 	}
 
-	pub fn value_kind_of(&self, name: &str) -> Option<ValueKind> {
+	pub(crate) fn value_kind_of(&self, name: &str) -> Option<ValueKind> {
 		self.slots.get(name).map(|slot| slot.value_kind)
 	}
 
-	pub fn start_frame(&mut self) {
+	pub(crate) fn start_frame(&mut self) {
 		for slot in self.slots.values_mut() {
 			slot.previous_signal = slot.signal;
 			slot.contributions.clear();
 		}
 	}
 
-	pub fn contribute_named(
+	pub(crate) fn contribute_named(
 		&mut self,
 		source: SourceId,
 		name: &str,
@@ -85,7 +85,7 @@ impl ActionState {
 		Ok(())
 	}
 
-	pub fn resolve(&mut self) {
+	pub(crate) fn resolve(&mut self) {
 		for slot in self.slots.values_mut() {
 			slot.resolve();
 		}

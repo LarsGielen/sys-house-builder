@@ -15,14 +15,14 @@ pub enum ValueKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Signal {
+pub(crate) enum Signal {
 	Button(bool),
 	Axis1D(f32),
 	Axis2D(Vec2),
 }
 
 impl ValueKind {
-	pub fn default_signal(self) -> Signal {
+	pub(crate) fn default_signal(self) -> Signal {
 		match self {
 			ValueKind::Button | ValueKind::Toggle => Signal::Button(false),
 			ValueKind::Axis1D(_) => Signal::Axis1D(0.0),
@@ -30,7 +30,7 @@ impl ValueKind {
 		}
 	}
 
-	pub fn accepts(self, signal: Signal) -> bool {
+	pub(crate) fn accepts(self, signal: Signal) -> bool {
 		matches!(
 			(self, signal),
 			(ValueKind::Button | ValueKind::Toggle, Signal::Button(_))

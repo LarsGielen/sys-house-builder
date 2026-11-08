@@ -1,6 +1,6 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 
-use crate::core::input::{ActiveContexts, Keymap, Shortcut};
+use crate::core::input::{ActiveContexts, ButtonCombo, Keymap};
 
 /// Whether pressing a shortcut would do something right now. The hint only reports it: whatever
 /// draws the hint decides how each case looks.
@@ -16,7 +16,7 @@ pub enum Availability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShortcutHint {
-	pub shortcut: Shortcut,
+	pub shortcut: ButtonCombo,
 	pub availability: Availability,
 }
 

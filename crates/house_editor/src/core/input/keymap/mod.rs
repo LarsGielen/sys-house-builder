@@ -21,11 +21,11 @@ pub struct Keymap {
 }
 
 impl Keymap {
-	pub fn button_bindings(&self) -> &[ButtonBinding] {
+	pub(crate) fn button_bindings(&self) -> &[ButtonBinding] {
 		&self.button_bindings
 	}
 
-	pub fn axis_bindings(&self) -> &[AxisBinding] {
+	pub(crate) fn axis_bindings(&self) -> &[AxisBinding] {
 		&self.axis_bindings
 	}
 
@@ -35,16 +35,16 @@ impl Keymap {
 	///
 	/// Availability comes from the same check the sources use, so a hint cannot disagree with what
 	/// pressing the shortcut does.
-	pub fn hints_for(&self, name: &str, active: &ActiveContexts) -> Vec<ShortcutHint> {
+	pub(crate) fn hints_for(&self, name: &str, active: &ActiveContexts) -> Vec<ShortcutHint> {
 		let mut hints: Vec<ShortcutHint> = self
 			.button_bindings
 			.iter()
 			.filter(|binding| binding.action == name)
 			.map(|binding| ShortcutHint {
-				shortcut: binding.shortcut,
+				shortcut: binding.button_combo,
 				availability: if !active.is_active(binding.context) {
 					Availability::ContextInactive
-				} else if self.is_live(binding.context, &binding.shortcut.claim(), active) {
+				} else if self.is_live(binding.context, &binding.button_combo.claim(), active) {
 					Availability::Available
 				} else {
 					Availability::Blocked
@@ -64,7 +64,7 @@ impl Keymap {
 	fn binds(&self, context: &str, claim: &Claim) -> bool {
 		self.button_bindings
 			.iter()
-			.any(|binding| binding.context == context && binding.shortcut.claim() == *claim)
+			.any(|binding| binding.context == context && binding.button_combo.claim() == *claim)
 			|| self
 				.axis_bindings
 				.iter()

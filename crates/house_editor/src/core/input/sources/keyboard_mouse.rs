@@ -7,7 +7,7 @@ use bevy::{
 };
 
 use crate::core::input::{
-	ActionState, AxisInput, ButtonBinding, Keymap, PhysicalButton, Shortcut,
+	ActionState, AxisInput, ButtonBinding, ButtonCombo, Keymap, PhysicalButton,
 	context::{ActiveContexts, Claim, ClaimedInput},
 	interpretation::Interpretation,
 	modifiers::ModifierSet,
@@ -23,14 +23,14 @@ use crate::core::input::{
 /// Contexts are the exception: a shortcut only starts while its binding is live, and it ends as
 /// soon as the binding is not, so a dialog that opens mid-drag cannot leave the drag running.
 #[derive(Default)]
-pub struct ButtonSource {
+pub(in crate::core::input) struct ButtonSource {
 	/// Shortcuts that started and whose input has not been released since. The context is part of
 	/// the key because two contexts may bind the same shortcut, and only the higher one is live.
-	latched: HashSet<(&'static str, Shortcut)>,
+	latched: HashSet<(&'static str, ButtonCombo)>,
 }
 
 impl ButtonSource {
-	pub fn poll(
+	fn poll(
 		&mut self,
 		keymap: &Keymap,
 		keys: &ButtonInput<KeyCode>,
@@ -39,26 +39,26 @@ impl ButtonSource {
 		state: &mut ActionState,
 	) {
 		for &ButtonBinding {
-			shortcut,
+			button_combo,
 			action: action_name,
 			context,
 			interpretation,
 		} in keymap.button_bindings()
 		{
-			let key = (context, shortcut);
+			let key = (context, button_combo);
 
-			if !keymap.is_live(context, &shortcut.claim(), active) {
+			if !keymap.is_live(context, &button_combo.claim(), active) {
 				self.latched.remove(&key);
 				continue;
 			}
 
 			let mut released = false;
 			if self.latched.contains(&key) {
-				if !shortcut.pressed(keys, mouse_buttons) {
+				if !button_combo.pressed(keys, mouse_buttons) {
 					self.latched.remove(&key);
 					released = true;
 				}
-			} else if shortcut.just_pressed(keys, mouse_buttons) {
+			} else if button_combo.just_pressed(keys, mouse_buttons) {
 				self.latched.insert(key);
 			}
 
@@ -73,7 +73,7 @@ impl ButtonSource {
 			// The keymap only binds registered button actions, so this is a bug if it ever fails.
 			// Warn once instead of every frame.
 			if let Err(error) =
-				state.contribute_named(shortcut.source(), action_name, Signal::Button(true))
+				state.contribute_named(button_combo.source(), action_name, Signal::Button(true))
 			{
 				warn_once!("cannot contribute to \"{action_name}\": {error:?}");
 			}
@@ -87,7 +87,7 @@ const PIXELS_PER_LINE: f32 = 40.0;
 
 /// Contributes every axis binding that has a value this frame: the mouse motion and scroll, and
 /// the buttons held for composites.
-pub fn poll_axis_bindings(
+fn poll_axis_bindings(
 	keymap: &Keymap,
 	keys: &ButtonInput<KeyCode>,
 	mouse_buttons: &ButtonInput<MouseButton>,

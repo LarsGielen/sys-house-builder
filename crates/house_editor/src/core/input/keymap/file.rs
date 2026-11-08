@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::core::input::{AxisInput, PhysicalButton, Scale, Shortcut, modifiers::ModifierSet};
+use crate::core::input::{AxisInput, ButtonCombo, PhysicalButton, Scale, modifiers::ModifierSet};
 
 // Unknown fields are rejected so that a file from before contexts (a top-level `[bindings]`) is
 // reported instead of being read as empty.
@@ -51,7 +51,7 @@ pub(super) struct EntryTable {
 
 /// What an entry binds, before it is checked against the action it is bound to.
 pub(super) enum ParsedEntry {
-	Shortcut(Shortcut),
+	ButtonCombo(ButtonCombo),
 	Axis {
 		input: AxisInput,
 		modifiers: ModifierSet,
@@ -92,7 +92,7 @@ fn parse_input_text(text: &str) -> Result<ParsedEntry, String> {
 		return Ok(ParsedEntry::Axis { input, modifiers });
 	}
 
-	text.parse().map(ParsedEntry::Shortcut)
+	text.parse().map(ParsedEntry::ButtonCombo)
 }
 
 impl EntryTable {

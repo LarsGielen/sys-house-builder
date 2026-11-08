@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 /// When a shortcut counts as active. Every shortcut starts as `Pressed`; the keymap can switch one
 /// with `interpret = "released"`, so the action's code does not change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Interpretation {
+pub(crate) enum Interpretation {
 	/// Active while the input is held, starting on the press.
 	#[default]
 	Pressed,

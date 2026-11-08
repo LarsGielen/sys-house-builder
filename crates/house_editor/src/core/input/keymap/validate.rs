@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::core::input::{
-	ActionState, AxisBinding, ButtonBinding, Scale, Shortcut, ValueKind,
+	ActionState, AxisBinding, ButtonBinding, ButtonCombo, Scale, ValueKind,
 	interpretation::Interpretation,
 	keymap::file::{Entry, ParsedEntry},
 };
@@ -65,10 +65,10 @@ pub(super) fn parse_context_bindings(
 						context,
 					});
 				}
-				ParsedEntry::Shortcut(shortcut) => {
+				ParsedEntry::ButtonCombo(button_combo) => {
 					if entry.scale().is_some() {
 						return Err(format!(
-							"action \"{action_name}\": a shortcut cannot have a scale (\"{shortcut}\")"
+							"action \"{action_name}\": a shortcut cannot have a scale (\"{button_combo}\")"
 						));
 					}
 
@@ -78,7 +78,7 @@ pub(super) fn parse_context_bindings(
 						Some(ValueKind::Button | ValueKind::Toggle)
 					) {
 						return Err(format!(
-							"action \"{action_name}\" is not a button, so it cannot be bound to the shortcut \"{shortcut}\""
+							"action \"{action_name}\" is not a button, so it cannot be bound to the shortcut \"{button_combo}\""
 						));
 					}
 
@@ -91,16 +91,16 @@ pub(super) fn parse_context_bindings(
 
 					if let Some(other) = button_bindings
 						.iter()
-						.find(|existing| existing.shortcut == shortcut)
+						.find(|existing| existing.button_combo == button_combo)
 					{
 						return Err(format!(
-							"shortcut \"{shortcut}\" is bound to both {} and {action}",
+							"shortcut \"{button_combo}\" is bound to both {} and {action}",
 							other.action
 						));
 					}
 
 					button_bindings.push(ButtonBinding {
-						shortcut,
+						button_combo,
 						action,
 						context,
 						interpretation,
@@ -123,11 +123,11 @@ fn check_direction_conflicts(
 ) -> Result<(), String> {
 	for (index, binding) in axis_bindings.iter().enumerate() {
 		for direction in binding.input.directions() {
-			let claimed = Shortcut::new(direction, binding.modifiers);
+			let claimed = ButtonCombo::new(direction, binding.modifiers);
 
 			if let Some(other) = button_bindings
 				.iter()
-				.find(|other| other.shortcut == claimed)
+				.find(|other| other.button_combo == claimed)
 			{
 				return Err(format!(
 					"\"{claimed}\" is used by both {} and the composite of {}",
