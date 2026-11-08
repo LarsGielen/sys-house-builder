@@ -11,5 +11,7 @@ pub trait Action: Copy {
 
 /// A fixed set of actions, normally one enum, that is registered together.
 pub trait ActionGroup: Action + 'static {
+	/// Every action of the group. Registration uses it, so an action left out cannot be bound in
+	/// the keymap.
 	fn all() -> &'static [Self];
 }

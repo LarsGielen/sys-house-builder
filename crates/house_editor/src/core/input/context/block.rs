@@ -23,6 +23,7 @@ pub enum Block {
 }
 
 impl Block {
+	/// Shorthand for `Block::Key(key)`.
 	pub fn key(key: KeyCode) -> Self {
 		Self::Key(key)
 	}

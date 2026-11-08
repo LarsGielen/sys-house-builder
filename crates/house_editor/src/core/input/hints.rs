@@ -8,6 +8,7 @@ use crate::core::input::{
 /// draws the hint decides how each case looks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Availability {
+	/// Pressing the shortcut acts now.
 	Available,
 	/// The shortcut's context has no entity right now, such as the viewport while the cursor is
 	/// elsewhere.
@@ -16,8 +17,10 @@ pub enum Availability {
 	Blocked,
 }
 
+/// A shortcut of an action, with whether it would act right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShortcutHint {
+	/// The shortcut to display. Its `Display` form is meant for users, such as `Ctrl+Shift+Z`.
 	pub shortcut: ButtonCombo,
 	pub availability: Availability,
 }

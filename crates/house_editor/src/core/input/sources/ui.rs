@@ -28,6 +28,8 @@ impl<A: Action> From<A> for UiAction {
 }
 
 impl UiActivated {
+	/// A press of the button action, or a flip of the toggle, for one frame. Trigger it with
+	/// `commands.trigger`. An action of another kind ignores it, with a warning.
 	pub fn button(action: impl Action) -> UiActivated {
 		Self::button_named(action.name())
 	}

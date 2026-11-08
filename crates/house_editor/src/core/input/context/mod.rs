@@ -21,6 +21,8 @@ pub struct InputContext {
 }
 
 impl InputContext {
+	/// A context with priority 0 that blocks and passes nothing. The name is what the keymap's
+	/// `[contexts.<name>.bindings]` section and `InputContextRef` refer to.
 	pub fn new(name: &'static str) -> Self {
 		Self {
 			name,
@@ -30,6 +32,8 @@ impl InputContext {
 		}
 	}
 
+	/// Sets the priority; a higher one sees an input first. It must be unique among the registered
+	/// contexts.
 	pub fn priority(mut self, priority: i32) -> Self {
 		self.priority = priority;
 		self
@@ -47,6 +51,7 @@ impl InputContext {
 		self
 	}
 
+	/// The name the keymap and `InputContextRef` use for this context.
 	pub fn name(&self) -> &'static str {
 		self.name
 	}

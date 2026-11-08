@@ -17,7 +17,9 @@ pub enum ValueKind {
 	Button,
 	/// A button whose value flips on every press and is kept between frames.
 	Toggle,
+	/// One number, such as scroll or a zoom speed.
 	Axis1D(AxisMode),
+	/// Two numbers, such as mouse motion or a movement direction.
 	Axis2D(AxisMode),
 }
 
