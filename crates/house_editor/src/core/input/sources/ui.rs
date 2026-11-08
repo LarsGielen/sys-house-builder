@@ -28,7 +28,12 @@ impl<A: Action> From<A> for UiAction {
 }
 
 impl UiActivated {
-	pub fn button(action: &'static str) -> UiActivated {
+	pub fn button(action: impl Action) -> UiActivated {
+		Self::button_named(action.name())
+	}
+
+	/// Like `button`, for a widget that only knows the name of its action.
+	pub fn button_named(action: &'static str) -> UiActivated {
 		UiActivated {
 			action,
 			signal: Signal::Button(true),
@@ -104,7 +109,7 @@ mod tests {
 	}
 
 	fn click(app: &mut App, action: &'static str) {
-		app.world_mut().trigger(UiActivated::button(action));
+		app.world_mut().trigger(UiActivated::button_named(action));
 	}
 
 	fn run_input_frame(app: &mut App) {
@@ -115,7 +120,8 @@ mod tests {
 	fn a_ui_activation_presses_the_action_for_one_frame() {
 		let mut app = app_with_ui_source();
 
-		click(&mut app, "test.click");
+		app.world_mut()
+			.trigger(UiActivated::button(TestAction::Click));
 		run_input_frame(&mut app);
 		let state = app.world().resource::<ActionState>();
 		assert!(state.pressed(TestAction::Click));

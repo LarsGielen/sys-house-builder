@@ -94,7 +94,7 @@ pub fn run_action_on_activate(
 		return;
 	};
 
-	commands.trigger(UiActivated::button(name));
+	commands.trigger(UiActivated::button_named(name));
 }
 
 #[derive(QueryData)]
