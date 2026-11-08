@@ -30,6 +30,10 @@
 //!   even where it binds nothing (a text field swallowing typing), except for the claims it
 //!   passes through.
 
+// Much of this public API is only exercised by future features, so unused items and re-exports are
+// expected.
+#![allow(dead_code, unused_imports)]
+
 mod action;
 mod axis_input;
 mod binding;
