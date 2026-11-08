@@ -5,18 +5,18 @@ use bevy::prelude::*;
 use crate::core::input::{
 	context::{Claim, ClaimedInput},
 	input_names::{KEY_NAMES, MOUSE_BUTTON_NAMES},
-	modifiers::{Modifier, Modifiers},
+	modifiers::{Modifier, ModifierSet},
 	sources::SourceId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ShortcutInput {
+pub enum PhysicalButton {
 	Key(KeyCode),
 	Mouse(MouseButton),
 	Modifier(Modifier),
 }
 
-impl ShortcutInput {
+impl PhysicalButton {
 	pub(crate) fn from_name(name: &str) -> Option<Self> {
 		let modifier = Modifier::NAMES
 			.iter()
@@ -55,8 +55,8 @@ impl ShortcutInput {
 
 	/// The modifiers held besides this input. A modifier key is not its own modifier, so a
 	/// shortcut on `shift` itself needs no Shift to be held, and `ctrl+shift` means Ctrl is held.
-	pub(crate) fn other_modifiers(&self, keys: &ButtonInput<KeyCode>) -> Modifiers {
-		let held = Modifiers::from_keys(keys);
+	pub(crate) fn other_modifiers(&self, keys: &ButtonInput<KeyCode>) -> ModifierSet {
+		let held = ModifierSet::from_keys(keys);
 		match self {
 			Self::Modifier(modifier) => held.without(*modifier),
 			Self::Key(_) | Self::Mouse(_) => held,
@@ -97,23 +97,23 @@ impl ShortcutInput {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shortcut {
-	input: ShortcutInput,
-	modifiers: Modifiers,
+	input: PhysicalButton,
+	modifiers: ModifierSet,
 }
 
 impl Shortcut {
 	/// `ctrl+<key>`, for rules in code such as a context that lets Ctrl+S through.
 	pub fn ctrl(key: KeyCode) -> Self {
 		Self {
-			input: ShortcutInput::Key(key),
-			modifiers: Modifiers {
+			input: PhysicalButton::Key(key),
+			modifiers: ModifierSet {
 				ctrl: true,
-				..Modifiers::default()
+				..ModifierSet::default()
 			},
 		}
 	}
 
-	pub(crate) fn new(input: ShortcutInput, modifiers: Modifiers) -> Self {
+	pub(crate) fn new(input: PhysicalButton, modifiers: ModifierSet) -> Self {
 		Self { input, modifiers }
 	}
 
@@ -129,7 +129,7 @@ impl Shortcut {
 
 	// Modifiers are ignored on purpose: they only select the shortcut when it starts, and
 	// releasing one mid-drag must not end the drag.
-	pub(crate) fn input_held(
+	pub(crate) fn pressed(
 		&self,
 		keys: &ButtonInput<KeyCode>,
 		mouse_buttons: &ButtonInput<MouseButton>,
@@ -188,11 +188,11 @@ impl FromStr for Shortcut {
 
 		let modifiers = tokens
 			.join("+")
-			.parse::<Modifiers>()
+			.parse::<ModifierSet>()
 			.map_err(|error| format!("{error} in \"{text}\""))?;
-		let input = ShortcutInput::from_name(&key_name)
+		let input = PhysicalButton::from_name(&key_name)
 			.ok_or_else(|| format!("unknown key or mouse button \"{key_name}\" in \"{text}\""))?;
-		if let ShortcutInput::Modifier(modifier) = input
+		if let PhysicalButton::Modifier(modifier) = input
 			&& modifiers.contains(modifier)
 		{
 			return Err(format!(
@@ -207,12 +207,12 @@ impl FromStr for Shortcut {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::core::input::modifiers::{Modifier, Modifiers};
+	use crate::core::input::modifiers::{Modifier, ModifierSet};
 
 	#[test]
 	fn shortcut_parsing_is_case_insensitive_and_checks_modifiers() {
 		let shortcut: Shortcut = "Ctrl+Shift+Z".parse().unwrap();
-		assert_eq!(shortcut.input, ShortcutInput::Key(KeyCode::KeyZ));
+		assert_eq!(shortcut.input, PhysicalButton::Key(KeyCode::KeyZ));
 		assert!(shortcut.modifiers.ctrl && shortcut.modifiers.shift && !shortcut.modifiers.alt);
 
 		assert!("ctrl+ctrl+z".parse::<Shortcut>().is_err());
@@ -232,11 +232,11 @@ mod tests {
 	#[test]
 	fn parses_mouse_buttons_without_confusing_them_with_arrow_keys() {
 		let shortcut: Shortcut = "shift+mouse_middle".parse().unwrap();
-		assert_eq!(shortcut.input, ShortcutInput::Mouse(MouseButton::Middle));
+		assert_eq!(shortcut.input, PhysicalButton::Mouse(MouseButton::Middle));
 		assert!(shortcut.modifiers.shift);
 
 		let arrow: Shortcut = "ctrl+left".parse().unwrap();
-		assert_eq!(arrow.input, ShortcutInput::Key(KeyCode::ArrowLeft));
+		assert_eq!(arrow.input, PhysicalButton::Key(KeyCode::ArrowLeft));
 
 		assert!("mouse_back".parse::<Shortcut>().is_err());
 	}
@@ -264,12 +264,12 @@ mod tests {
 	#[test]
 	fn a_modifier_key_is_a_shortcut_input() {
 		let shift: Shortcut = "shift".parse().unwrap();
-		assert_eq!(shift.input, ShortcutInput::Modifier(Modifier::Shift));
-		assert_eq!(shift.modifiers, Modifiers::default());
+		assert_eq!(shift.input, PhysicalButton::Modifier(Modifier::Shift));
+		assert_eq!(shift.modifiers, ModifierSet::default());
 		assert_eq!(shift.to_string(), "Shift");
 
 		let both: Shortcut = "ctrl+shift".parse().unwrap();
-		assert_eq!(both.input, ShortcutInput::Modifier(Modifier::Shift));
+		assert_eq!(both.input, PhysicalButton::Modifier(Modifier::Shift));
 		assert!(both.modifiers.ctrl && !both.modifiers.shift);
 		assert_eq!(both.to_string(), "Ctrl+Shift");
 	}

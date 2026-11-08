@@ -7,10 +7,10 @@ use bevy::{
 };
 
 use crate::core::input::{
-	ActionState, AxisInput, ButtonBinding, Keymap, Shortcut, ShortcutInput,
+	ActionState, AxisInput, ButtonBinding, Keymap, PhysicalButton, Shortcut,
 	context::{ActiveContexts, Claim, ClaimedInput},
 	interpretation::Interpretation,
-	modifiers::Modifiers,
+	modifiers::ModifierSet,
 	value::Signal,
 };
 
@@ -54,7 +54,7 @@ impl ButtonSource {
 
 			let mut released = false;
 			if self.latched.contains(&key) {
-				if !shortcut.input_held(keys, mouse_buttons) {
+				if !shortcut.pressed(keys, mouse_buttons) {
 					self.latched.remove(&key);
 					released = true;
 				}
@@ -96,20 +96,20 @@ pub fn poll_axis_bindings(
 	active: &ActiveContexts,
 	state: &mut ActionState,
 ) {
-	let held_modifiers = Modifiers::from_keys(keys);
+	let all_held_modifiers = ModifierSet::from_keys(keys);
 	for binding in keymap.axis_bindings() {
 		// A modifier key that is a direction is not a modifier of its own composite, so holding
 		// Shift to rise does not stop the composite from matching.
-		let held_modifiers =
+		let modifiers_besides_directions =
 			binding
 				.input
 				.directions()
 				.into_iter()
-				.fold(held_modifiers, |held, direction| match direction {
-					ShortcutInput::Modifier(modifier) => held.without(modifier),
-					ShortcutInput::Key(_) | ShortcutInput::Mouse(_) => held,
+				.fold(all_held_modifiers, |held, direction| match direction {
+					PhysicalButton::Modifier(modifier) => held.without(modifier),
+					PhysicalButton::Key(_) | PhysicalButton::Mouse(_) => held,
 				});
-		if binding.modifiers != held_modifiers {
+		if binding.modifiers != modifiers_besides_directions {
 			continue;
 		}
 
@@ -178,9 +178,9 @@ fn composite_signal(
 	input: AxisInput,
 	keys: &ButtonInput<KeyCode>,
 	mouse_buttons: &ButtonInput<MouseButton>,
-	is_direction_live: impl Fn(ShortcutInput) -> bool,
+	is_direction_live: impl Fn(PhysicalButton) -> bool,
 ) -> Option<Signal> {
-	let held = |direction: ShortcutInput| {
+	let held = |direction: PhysicalButton| {
 		if direction.pressed(keys, mouse_buttons) && is_direction_live(direction) {
 			1.0
 		} else {
@@ -495,18 +495,18 @@ mod tests {
 
 	fn composite_2d() -> AxisInput {
 		AxisInput::composite_2d(
-			ShortcutInput::Key(KeyCode::KeyW),
-			ShortcutInput::Key(KeyCode::KeyS),
-			ShortcutInput::Key(KeyCode::KeyA),
-			ShortcutInput::Key(KeyCode::KeyD),
+			PhysicalButton::Key(KeyCode::KeyW),
+			PhysicalButton::Key(KeyCode::KeyS),
+			PhysicalButton::Key(KeyCode::KeyA),
+			PhysicalButton::Key(KeyCode::KeyD),
 		)
 		.unwrap()
 	}
 
 	fn composite_1d() -> AxisInput {
 		AxisInput::composite_1d(
-			ShortcutInput::Mouse(MouseButton::Left),
-			ShortcutInput::Key(KeyCode::KeyC),
+			PhysicalButton::Mouse(MouseButton::Left),
+			PhysicalButton::Key(KeyCode::KeyC),
 		)
 		.unwrap()
 	}

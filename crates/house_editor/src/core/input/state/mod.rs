@@ -11,7 +11,7 @@ use crate::core::input::{
 struct ActionSlot {
 	value_kind: ValueKind,
 	signal: Signal,
-	signal_previous: Signal,
+	previous_signal: Signal,
 	contributions: Vec<(SourceId, Signal)>,
 	owner: Option<SourceId>,
 	toggled: bool,     // The value of a toggle, which the slot keeps between frames.
@@ -36,7 +36,7 @@ impl ActionState {
 			ActionSlot {
 				value_kind: action.value(),
 				signal: action.value().default_signal(),
-				signal_previous: action.value().default_signal(),
+				previous_signal: action.value().default_signal(),
 				contributions: Vec::new(),
 				owner: None,
 				toggled: false,
@@ -56,13 +56,13 @@ impl ActionState {
 		self.slots.get_key_value(name).map(|(name, _)| *name)
 	}
 
-	pub fn kind_of(&self, name: &str) -> Option<ValueKind> {
+	pub fn value_kind_of(&self, name: &str) -> Option<ValueKind> {
 		self.slots.get(name).map(|slot| slot.value_kind)
 	}
 
 	pub fn start_frame(&mut self) {
 		for slot in self.slots.values_mut() {
-			slot.signal_previous = slot.signal;
+			slot.previous_signal = slot.signal;
 			slot.contributions.clear();
 		}
 	}
@@ -108,7 +108,7 @@ impl ActionState {
 		};
 
 		matches!(
-			(slot.value_kind, slot.signal, slot.signal_previous),
+			(slot.value_kind, slot.signal, slot.previous_signal),
 			(
 				ValueKind::Button,
 				Signal::Button(true),
@@ -123,7 +123,7 @@ impl ActionState {
 		};
 
 		matches!(
-			(slot.value_kind, slot.signal, slot.signal_previous),
+			(slot.value_kind, slot.signal, slot.previous_signal),
 			(
 				ValueKind::Button,
 				Signal::Button(false),
@@ -146,7 +146,7 @@ impl ActionState {
 	/// Whether a toggle changed since the last frame began.
 	pub fn just_toggled(&self, action: impl Action) -> bool {
 		self.slots.get(action.name()).is_some_and(|slot| {
-			slot.value_kind == ValueKind::Toggle && slot.signal != slot.signal_previous
+			slot.value_kind == ValueKind::Toggle && slot.signal != slot.previous_signal
 		})
 	}
 

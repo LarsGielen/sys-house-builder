@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
-use crate::core::input::{AxisInput, Scale, Shortcut, ShortcutInput, modifiers::Modifiers};
+use crate::core::input::{AxisInput, PhysicalButton, Scale, Shortcut, modifiers::ModifierSet};
 
 // Unknown fields are rejected so that a file from before contexts (a top-level `[bindings]`) is
 // reported instead of being read as empty.
@@ -54,7 +54,7 @@ pub(super) enum ParsedEntry {
 	Shortcut(Shortcut),
 	Axis {
 		input: AxisInput,
-		modifiers: Modifiers,
+		modifiers: ModifierSet,
 	},
 }
 
@@ -122,7 +122,7 @@ impl EntryTable {
 	}
 
 	fn parse_composite(&self, shape: &str) -> Result<ParsedEntry, String> {
-		let modifiers: Modifiers = self
+		let modifiers: ModifierSet = self
 			.modifiers
 			.as_deref()
 			.unwrap_or_default()
@@ -154,7 +154,7 @@ impl EntryTable {
 		// A direction that is a modifier key is judged without itself, like a shortcut on that key,
 		// so the composite cannot also require it as a modifier.
 		for direction in input.directions() {
-			if let ShortcutInput::Modifier(modifier) = direction
+			if let PhysicalButton::Modifier(modifier) = direction
 				&& modifiers.contains(modifier)
 			{
 				return Err(format!(
@@ -180,10 +180,10 @@ impl EntryTable {
 	}
 }
 
-fn direction(name: &str, value: &Option<String>, shape: &str) -> Result<ShortcutInput, String> {
+fn direction(name: &str, value: &Option<String>, shape: &str) -> Result<PhysicalButton, String> {
 	let text = value
 		.as_deref()
 		.ok_or_else(|| format!("composite {shape} is missing `{name}`"))?;
-	ShortcutInput::from_name(&text.trim().to_ascii_lowercase())
+	PhysicalButton::from_name(&text.trim().to_ascii_lowercase())
 		.ok_or_else(|| format!("unknown key or mouse button \"{text}\" for `{name}`"))
 }

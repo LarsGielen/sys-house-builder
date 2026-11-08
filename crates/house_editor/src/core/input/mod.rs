@@ -22,7 +22,7 @@ pub use interpretation::Interpretation;
 pub use keymap::Keymap;
 pub use modifiers::Modifier;
 pub use plugin::{ActionSystems, InputAppExt, InputPlugin};
-pub use shortcut::{Shortcut, ShortcutInput};
+pub use shortcut::{PhysicalButton, Shortcut};
 pub use sources::{UiAction, UiActivated};
 pub use state::ActionState;
 pub use value::{AxisMode, ValueKind};

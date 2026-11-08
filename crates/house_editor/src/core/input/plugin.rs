@@ -88,7 +88,7 @@ impl Plugin for InputPlugin {
 
 		// ui input: needs no keymap, since a widget names its action directly
 		app.add_observer(sources::handle_ui_activations);
-		app.add_message::<sources::UiActivatedMessage>();
+		app.add_message::<sources::PendingUiActivation>();
 		app.add_systems(
 			PreUpdate,
 			poll_ui_activations.in_set(ActionSystems::Sources),

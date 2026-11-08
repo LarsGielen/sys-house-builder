@@ -187,20 +187,20 @@ mod tests {
 
 	use super::*;
 	use crate::core::input::{
-		ShortcutInput,
-		modifiers::{Modifier, Modifiers},
+		PhysicalButton,
+		modifiers::{Modifier, ModifierSet},
 	};
 
 	fn plain(key: KeyCode) -> Claim {
-		with(key, Modifiers::default())
+		with(key, ModifierSet::default())
 	}
 
 	fn ctrl(key: KeyCode) -> Claim {
 		with(
 			key,
-			Modifiers {
+			ModifierSet {
 				ctrl: true,
-				..Modifiers::default()
+				..ModifierSet::default()
 			},
 		)
 	}
@@ -208,24 +208,24 @@ mod tests {
 	fn shift(key: KeyCode) -> Claim {
 		with(
 			key,
-			Modifiers {
+			ModifierSet {
 				shift: true,
-				..Modifiers::default()
+				..ModifierSet::default()
 			},
 		)
 	}
 
-	fn with(key: KeyCode, modifiers: Modifiers) -> Claim {
+	fn with(key: KeyCode, modifiers: ModifierSet) -> Claim {
 		Claim {
-			input: ClaimedInput::Button(ShortcutInput::Key(key)),
+			input: ClaimedInput::Button(PhysicalButton::Key(key)),
 			modifiers,
 		}
 	}
 
 	fn mouse(button: MouseButton) -> Claim {
 		Claim {
-			input: ClaimedInput::Button(ShortcutInput::Mouse(button)),
-			modifiers: Modifiers::default(),
+			input: ClaimedInput::Button(PhysicalButton::Mouse(button)),
+			modifiers: ModifierSet::default(),
 		}
 	}
 
@@ -324,7 +324,7 @@ mod tests {
 		assert!(!stack.is_live("global", &mouse(MouseButton::Right), no_bindings));
 		let motion = Claim {
 			input: ClaimedInput::MouseMotion,
-			modifiers: Modifiers::default(),
+			modifiers: ModifierSet::default(),
 		};
 		assert!(!stack.is_live("global", &motion, no_bindings));
 		// The blocking context is not blocked by itself.
@@ -482,12 +482,12 @@ mod tests {
 			.block(Block::Modifier(Modifier::Shift));
 		let stack = active(vec![global(), context]);
 		let shift_key = Claim {
-			input: ClaimedInput::Button(ShortcutInput::Modifier(Modifier::Shift)),
-			modifiers: Modifiers::default(),
+			input: ClaimedInput::Button(PhysicalButton::Modifier(Modifier::Shift)),
+			modifiers: ModifierSet::default(),
 		};
 		let ctrl_key = Claim {
-			input: ClaimedInput::Button(ShortcutInput::Modifier(Modifier::Ctrl)),
-			modifiers: Modifiers::default(),
+			input: ClaimedInput::Button(PhysicalButton::Modifier(Modifier::Ctrl)),
+			modifiers: ModifierSet::default(),
 		};
 
 		assert!(!stack.is_live("global", &shift_key, no_bindings));

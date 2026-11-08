@@ -4,7 +4,7 @@ use bevy::math::Vec2;
 use serde::Deserialize;
 
 use crate::core::input::{
-	AxisMode, ShortcutInput, ValueKind, context::ClaimedInput, sources::SourceId, value::Signal,
+	AxisMode, PhysicalButton, ValueKind, context::ClaimedInput, sources::SourceId, value::Signal,
 };
 
 /// A physical input that produces an axis value, bound to an axis action in the keymap.
@@ -16,14 +16,14 @@ pub enum AxisInput {
 	MouseMotion,
 	Scroll,
 	Composite1D {
-		up: ShortcutInput,
-		down: ShortcutInput,
+		up: PhysicalButton,
+		down: PhysicalButton,
 	},
 	Composite2D {
-		up: ShortcutInput,
-		down: ShortcutInput,
-		left: ShortcutInput,
-		right: ShortcutInput,
+		up: PhysicalButton,
+		down: PhysicalButton,
+		left: PhysicalButton,
+		right: PhysicalButton,
 	},
 }
 
@@ -31,7 +31,7 @@ impl AxisInput {
 	const NAMED: [Self; 2] = [Self::MouseMotion, Self::Scroll];
 
 	/// Fails when two directions are the same input, since they would cancel each other.
-	pub fn composite_1d(up: ShortcutInput, down: ShortcutInput) -> Result<Self, String> {
+	pub fn composite_1d(up: PhysicalButton, down: PhysicalButton) -> Result<Self, String> {
 		let composite = Self::Composite1D { up, down };
 		composite.check_distinct_directions()?;
 		Ok(composite)
@@ -39,10 +39,10 @@ impl AxisInput {
 
 	/// Fails when two directions are the same input, since they would cancel each other.
 	pub fn composite_2d(
-		up: ShortcutInput,
-		down: ShortcutInput,
-		left: ShortcutInput,
-		right: ShortcutInput,
+		up: PhysicalButton,
+		down: PhysicalButton,
+		left: PhysicalButton,
+		right: PhysicalButton,
 	) -> Result<Self, String> {
 		let composite = Self::Composite2D {
 			up,
@@ -76,7 +76,7 @@ impl AxisInput {
 	}
 
 	/// The buttons a composite reads, empty for the other inputs.
-	pub fn directions(self) -> Vec<ShortcutInput> {
+	pub fn directions(self) -> Vec<PhysicalButton> {
 		match self {
 			Self::MouseMotion | Self::Scroll => Vec::new(),
 			Self::Composite1D { up, down } => vec![up, down],
@@ -298,8 +298,8 @@ mod tests {
 		);
 	}
 
-	fn key(key: KeyCode) -> ShortcutInput {
-		ShortcutInput::Key(key)
+	fn key(key: KeyCode) -> PhysicalButton {
+		PhysicalButton::Key(key)
 	}
 
 	fn wasd() -> AxisInput {
@@ -336,7 +336,7 @@ mod tests {
 
 	#[test]
 	fn a_composite_is_a_mouse_input_only_when_every_direction_is_a_mouse_button() {
-		let mouse = |button| ShortcutInput::Mouse(button);
+		let mouse = |button| PhysicalButton::Mouse(button);
 		let zoom =
 			AxisInput::composite_1d(mouse(MouseButton::Left), mouse(MouseButton::Right)).unwrap();
 		let mixed = AxisInput::composite_1d(mouse(MouseButton::Left), key(KeyCode::KeyC)).unwrap();

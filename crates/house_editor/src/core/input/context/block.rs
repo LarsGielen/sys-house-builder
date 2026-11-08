@@ -1,9 +1,9 @@
 use bevy::prelude::KeyCode;
 
 use crate::core::input::{
-	ShortcutInput,
+	PhysicalButton,
 	context::{Claim, ClaimedInput},
-	modifiers::{Modifier, Modifiers},
+	modifiers::{Modifier, ModifierSet},
 };
 
 /// What a context swallows for the contexts below it, even where it binds nothing. Written in
@@ -32,11 +32,11 @@ impl Block {
 			Self::All => true,
 			Self::Modifier(modifier) => {
 				claim.modifiers.contains(modifier)
-					|| claim.input == ClaimedInput::Button(ShortcutInput::Modifier(modifier))
+					|| claim.input == ClaimedInput::Button(PhysicalButton::Modifier(modifier))
 			}
-			Self::Key(key) => claim.input == ClaimedInput::Button(ShortcutInput::Key(key)),
+			Self::Key(key) => claim.input == ClaimedInput::Button(PhysicalButton::Key(key)),
 			Self::Typing => match claim.input {
-				ClaimedInput::Button(ShortcutInput::Key(key)) => is_typing(key, claim.modifiers),
+				ClaimedInput::Button(PhysicalButton::Key(key)) => is_typing(key, claim.modifiers),
 				// Mouse buttons, motion and scroll are not typed.
 				_ => false,
 			},
@@ -44,7 +44,7 @@ impl Block {
 	}
 }
 
-fn is_typing(key: KeyCode, modifiers: Modifiers) -> bool {
+fn is_typing(key: KeyCode, modifiers: ModifierSet) -> bool {
 	match key {
 		KeyCode::Backspace
 		| KeyCode::Delete
@@ -63,11 +63,11 @@ fn is_typing(key: KeyCode, modifiers: Modifiers) -> bool {
 		{
 			true
 		}
-		_ => !modifiers.ctrl && !modifiers.alt && is_text_key(ShortcutInput::Key(key)),
+		_ => !modifiers.ctrl && !modifiers.alt && is_text_key(PhysicalButton::Key(key)),
 	}
 }
 
-fn is_text_key(input: ShortcutInput) -> bool {
+fn is_text_key(input: PhysicalButton) -> bool {
 	input
 		.name()
 		.is_some_and(|name| name.len() == 1 || name == "space")

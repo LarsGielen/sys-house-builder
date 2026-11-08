@@ -10,7 +10,7 @@ pub struct UiActivated {
 
 // Buffers an activation from `Update` until the sources run in the next `PreUpdate`.
 #[derive(Message)]
-pub(in crate::core::input) struct UiActivatedMessage {
+pub(in crate::core::input) struct PendingUiActivation {
 	action: &'static str,
 	signal: Signal,
 }
@@ -36,16 +36,16 @@ impl UiActivated {
 
 pub(in crate::core::input) fn handle_ui_activations(
 	activation: On<UiActivated>,
-	mut activations: MessageWriter<UiActivatedMessage>,
+	mut activations: MessageWriter<PendingUiActivation>,
 ) {
-	activations.write(UiActivatedMessage {
+	activations.write(PendingUiActivation {
 		action: activation.action,
 		signal: activation.signal,
 	});
 }
 
 pub(in crate::core::input) fn poll_ui_activations(
-	mut message_reader: MessageReader<UiActivatedMessage>,
+	mut message_reader: MessageReader<PendingUiActivation>,
 	mut state: ResMut<ActionState>,
 ) {
 	for message in message_reader.read() {

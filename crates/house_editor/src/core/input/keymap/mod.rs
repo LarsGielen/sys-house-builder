@@ -4,7 +4,7 @@ use crate::core::input::{
 	ActionState, AxisBinding, ButtonBinding,
 	context::{ActiveContexts, Claim, InputContexts},
 	hints::{Availability, ShortcutHint},
-	keymap::{file::KeymapFile, validate::parse_context},
+	keymap::{file::KeymapFile, validate::parse_context_bindings},
 };
 
 mod file;
@@ -168,7 +168,7 @@ impl Keymap {
 			let Some(section) = file.contexts.remove(context.name()) else {
 				continue;
 			};
-			let (buttons, axes) = parse_context(context.name(), section.bindings, actions)
+			let (buttons, axes) = parse_context_bindings(context.name(), section.bindings, actions)
 				.map_err(|error| format!("context \"{}\": {error}", context.name()))?;
 			button_bindings.extend(buttons);
 			axis_bindings.extend(axes);
@@ -186,8 +186,8 @@ mod tests {
 	use super::*;
 	use crate::core::input::{
 		Action, ActionGroup, ActiveContexts, Availability, AxisInput, Block, InputContext,
-		InputContexts, Interpretation, Modifier, Scale, ShortcutInput, ValueKind,
-		modifiers::Modifiers, value::AxisMode,
+		InputContexts, Interpretation, Modifier, PhysicalButton, Scale, ValueKind,
+		modifiers::ModifierSet, value::AxisMode,
 	};
 
 	#[derive(Clone, Copy)]
@@ -352,14 +352,14 @@ mod tests {
 			&[
 				AxisBinding {
 					input: AxisInput::MouseMotion,
-					modifiers: Modifiers::default(),
+					modifiers: ModifierSet::default(),
 					scale: Scale::Two([1.0, 1.0]),
 					action: "test.look",
 					context: "global"
 				},
 				AxisBinding {
 					input: AxisInput::Scroll,
-					modifiers: Modifiers::default(),
+					modifiers: ModifierSet::default(),
 					scale: Scale::One(1.0),
 					action: "test.zoom",
 					context: "global"
@@ -387,7 +387,7 @@ mod tests {
 		let text = "[contexts.global.bindings]\n\"test.look\" = [\"ctrl+alt+mouse_motion\"]\n\"test.zoom\" = [\"Shift+scroll\"]";
 		let keymap = Keymap::parse(text, &registered_actions(), &registered_contexts()).unwrap();
 
-		let modifiers: Vec<Modifiers> = keymap
+		let modifiers: Vec<ModifierSet> = keymap
 			.axis_bindings()
 			.iter()
 			.map(|binding| binding.modifiers)
@@ -557,15 +557,15 @@ mod tests {
 
 		let bindings = keymap.axis_bindings();
 		assert_eq!(bindings.len(), 3);
-		assert_eq!(bindings[0].modifiers, Modifiers::default());
+		assert_eq!(bindings[0].modifiers, ModifierSet::default());
 		assert_eq!(bindings[0].scale, Scale::Two([1.0, 1.0]));
 		assert_eq!(bindings[1].modifiers, "shift".parse().unwrap());
 		assert_eq!(bindings[1].scale, Scale::Two([2.0, 2.0]));
 		assert_eq!(
 			bindings[2].input,
 			AxisInput::composite_1d(
-				ShortcutInput::Mouse(MouseButton::Left),
-				ShortcutInput::Key(KeyCode::Space)
+				PhysicalButton::Mouse(MouseButton::Left),
+				PhysicalButton::Key(KeyCode::Space)
 			)
 			.unwrap()
 		);
@@ -779,8 +779,8 @@ mod tests {
 		assert_eq!(
 			keymap.axis_bindings()[0].input.directions(),
 			[
-				ShortcutInput::Modifier(Modifier::Shift),
-				ShortcutInput::Modifier(Modifier::Ctrl)
+				PhysicalButton::Modifier(Modifier::Shift),
+				PhysicalButton::Modifier(Modifier::Ctrl)
 			]
 		);
 	}

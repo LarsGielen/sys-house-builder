@@ -8,7 +8,7 @@ use crate::core::input::{
 
 /// Parses one context's bindings. A shortcut, or a button of a composite, may be used once per
 /// context: two contexts may bind the same input, because the higher one then shadows the lower.
-pub(super) fn parse_context(
+pub(super) fn parse_context_bindings(
 	context: &'static str,
 	bindings: BTreeMap<String, Vec<Entry>>,
 	actions: &ActionState,
@@ -28,7 +28,7 @@ pub(super) fn parse_context(
 
 			match parsed {
 				ParsedEntry::Axis { input, modifiers } => {
-					if actions.kind_of(action) != Some(input.value_kind()) {
+					if actions.value_kind_of(action) != Some(input.value_kind()) {
 						return Err(format!(
 							"action \"{action_name}\" cannot be bound to \"{input}\": the kinds do not match"
 						));
@@ -74,7 +74,7 @@ pub(super) fn parse_context(
 
 					// A shortcut is a button press, so it can drive a button or flip a toggle.
 					if !matches!(
-						actions.kind_of(action),
+						actions.value_kind_of(action),
 						Some(ValueKind::Button | ValueKind::Toggle)
 					) {
 						return Err(format!(

@@ -1,9 +1,9 @@
-use crate::core::input::{ShortcutInput, modifiers::Modifiers};
+use crate::core::input::{PhysicalButton, modifiers::ModifierSet};
 
 /// An input as contexts see it: the thing a binding takes, whatever action it drives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClaimedInput {
-	Button(ShortcutInput),
+	Button(PhysicalButton),
 	MouseMotion,
 	Scroll,
 }
@@ -13,5 +13,5 @@ pub(crate) enum ClaimedInput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Claim {
 	pub input: ClaimedInput,
-	pub modifiers: Modifiers,
+	pub modifiers: ModifierSet,
 }

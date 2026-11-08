@@ -1,6 +1,6 @@
 use crate::core::input::{
 	AxisInput, Scale, Shortcut, context::Claim, interpretation::Interpretation,
-	modifiers::Modifiers,
+	modifiers::ModifierSet,
 };
 
 /// A shortcut bound to a button action in one context.
@@ -20,7 +20,7 @@ pub struct ButtonBinding {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AxisBinding {
 	pub input: AxisInput,
-	pub modifiers: Modifiers,
+	pub modifiers: ModifierSet,
 	pub scale: Scale,
 	pub action: &'static str,
 	/// The context whose section of the keymap holds this binding.
